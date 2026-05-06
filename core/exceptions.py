@@ -1,15 +1,17 @@
-"""core/exceptions.py — 异常路由分流器
-
+"""
+core/exceptions.py — 异常路由分流器
+====================================
 层级:
-    BusinessException   → L1 飞书通知（业务规则异常）
-    SystemException     → L2 Linear 工单（代码级 Bug）
+    BusinessException → L1 飞书通知（业务规则异常，静默处理）
+    SystemException   → L2 飞书告警（代码级 Bug，强制退出）
 """
 
 from typing import Any, Optional
+from core.notifier import send_business_alert, send_system_alert
 
 
 class BusinessException(Exception):
-    """业务规则异常 — 由飞书 L1 监控处理
+    """业务规则异常 — L1 飞书通知，流程继续
 
     触发场景:
         - 账号不符合要求
@@ -17,22 +19,24 @@ class BusinessException(Exception):
         - 业务逻辑前置条件不满足
     """
 
-    def __init__(self, message: str, context: Optional[dict] = None):
+    def __init__(self, message: str, project: str = "未命名项目",
+                 context: Optional[dict] = None):
         super().__init__(message)
+        self.project = project
         self.context = context or {}
         self.category = "business"
 
-    def to_payload(self) -> dict:
-        """转成飞书通知的标准载荷"""
-        return {
-            "type": "business_exception",
-            "message": str(self),
-            "context": self.context,
-        }
+    def notify(self) -> bool:
+        """发送 L1 飞书业务通知"""
+        return send_business_alert(
+            project=self.project,
+            message=str(self),
+            context=self.context,
+        )
 
 
 class SystemException(Exception):
-    """系统 Bug 异常 — 由 Linear L2 工单处理
+    """系统 Bug 异常 — L2 飞书告警，强制退出流程
 
     触发场景:
         - 网页结构变更导致 KeyError
@@ -40,18 +44,25 @@ class SystemException(Exception):
         - 接口响应格式异常
     """
 
-    def __init__(self, message: str, traceback_str: str = "",
+    def __init__(self, message: str, project: str = "未命名项目",
                  payload: Optional[dict] = None):
         super().__init__(message)
-        self.traceback = traceback_str
+        self.project = project
+        # 自动捕获当前堆栈
+        import traceback
+        self.traceback_str = traceback.format_exc()
         self.payload = payload or {}
         self.category = "system"
 
-    def to_payload(self) -> dict:
-        """转成 Linear 工单的标准载荷"""
-        return {
-            "type": "system_bug",
-            "message": str(self),
-            "traceback": self.traceback,
-            "payload": self.payload,
-        }
+    def notify(self, extra_payload: Optional[dict] = None) -> bool:
+        """发送 L2 飞书系统告警"""
+        merged_payload = {**self.payload}
+        if extra_payload:
+            merged_payload.update(extra_payload)
+
+        return send_system_alert(
+            project=self.project,
+            message=str(self),
+            traceback_str=self.traceback_str,
+            payload=merged_payload if merged_payload else None,
+        )
