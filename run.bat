@@ -2,7 +2,7 @@
 chcp 65001 >nul
 
 REM ============================================
-REM run.bat â€” Yingdao RPA Entry
+REM run.bat ¡ª Yingdao RPA Entry
 REM Usage : run.bat <run_id>
 REM Example: run.bat 20260506_001
 REM
