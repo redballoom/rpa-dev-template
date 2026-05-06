@@ -1,16 +1,20 @@
 """
-git_controller.py -- Git 动态路由调度器
-=========================================
+git_controller.py — Git 动态路由调度器 (CLI 模式)
+===================================================
 职能: 影刀专用，运行时动态切换 Git 分支，实现环境隔离。
-
-增强功能:
-  - 首次运行自动 git clone（无本地仓库时）
-  - 日常运行切换分支 + 拉取最新
-  - 支持多机部署（新机器自动拉取）
+调用方式 (影刀内 BAT):
+    python git_controller.py --is_test True --repo_path D:/RPA_Project
+    python git_controller.py --is_test False --repo_path D:/RPA_Project --git_url git@github.com:user/repo.git
 """
 
-import subprocess, traceback, os, sys
+import subprocess
+import traceback
+import os
+import sys
+import argparse
+import json
 
+# Windows GBK 编码兼容
 try:
     if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
         import io
@@ -66,7 +70,10 @@ def switch_git_env(is_test: bool, repo_path: str, git_url: str = "") -> dict:
 
         checkout_res = subprocess.run(["git", "-C", repo_path, "checkout", target_branch], capture_output=True, text=True)
         if checkout_res.returncode != 0:
-            track_res = subprocess.run(["git", "-C", repo_path, "checkout", "-b", target_branch, f"origin/{target_branch}"], capture_output=True, text=True)
+            track_res = subprocess.run(
+                ["git", "-C", repo_path, "checkout", "-b", target_branch, f"origin/{target_branch}"],
+                capture_output=True, text=True
+            )
             if track_res.returncode != 0:
                 subprocess.run(["git", "-C", repo_path, "checkout", "-b", target_branch], check=True, capture_output=True, text=True)
                 print(f"[系统调度] 分支 {target_branch} 从本地 HEAD 创建")
@@ -83,7 +90,31 @@ def switch_git_env(is_test: bool, repo_path: str, git_url: str = "") -> dict:
         return {"status": "error", "msg": traceback.format_exc()}
 
 
+# ========== CLI 入口 ==========
 if __name__ == "__main__":
-    result = switch_git_env(is_test=True, repo_path=os.path.dirname(os.path.abspath(__file__)))
-    print(f"Result: {result}")
-    subprocess.run(["git", "-C", os.path.dirname(os.path.abspath(__file__)), "checkout", "main"], capture_output=True)
+    parser = argparse.ArgumentParser(description="影刀 Git 环境路由调度器")
+    parser.add_argument("--is_test", type=lambda x: x.lower() == "true", required=True,
+                        help="True=fix/bug-test, False=main")
+    parser.add_argument("--repo_path", type=str, required=True,
+                        help="本地仓库绝对路径")
+    parser.add_argument("--git_url", type=str, default="",
+                        help="远程仓库 URL（首次部署必需）")
+    parser.add_argument("--output", type=str, default="",
+                        help="结果输出到 JSON 文件（可选）")
+
+    args = parser.parse_args()
+
+    result = switch_git_env(
+        is_test=args.is_test,
+        repo_path=args.repo_path,
+        git_url=args.git_url
+    )
+
+    # 输出 JSON
+    output = json.dumps(result, ensure_ascii=False, indent=2)
+    print(output)
+
+    # 可选: 写入文件供影刀直接读
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(output)
