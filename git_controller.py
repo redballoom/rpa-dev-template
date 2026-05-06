@@ -11,9 +11,13 @@ git_controller.py -- Git 动态路由调度器
 
 import subprocess, traceback, os, sys
 
-if sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+try:
+    if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
+        import io
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+except AttributeError:
+    pass
 
 
 def switch_git_env(is_test: bool, repo_path: str, git_url: str = "") -> dict:

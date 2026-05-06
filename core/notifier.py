@@ -12,9 +12,13 @@ import sys
 from typing import Optional
 
 # Windows GBK 编码兼容
-if sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+try:
+    if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
+        import io
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+except AttributeError:
+    pass
 
 # ── 飞书 Webhook ──
 FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/e4a52f76-64dd-45e0-872c-93c94a6474e7"
