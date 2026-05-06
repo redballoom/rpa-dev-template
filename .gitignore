@@ -1,0 +1,32 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.db
+*.sqlite3
+
+# ── 影刀 RPA ──
+*.log
+*.tmp
+screenshots/
+debug/
+output/
+
+# ── 系统文件 ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── 数据（含敏感业务数据） ──
+data/*.json
+data/*.csv
+!data/.gitkeep
