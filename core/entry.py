@@ -2,7 +2,7 @@
 import json, traceback
 from core.exceptions import BusinessException, SystemException
 
-def run_tasks(run_id, project="开发模板", tasks=None, **kwargs):
+def run_tasks(run_id, project="开发模板", tasks=None, repo_path=".", **kwargs):
     if tasks is None:
         tasks = [{"id": 1, "name": "示例"}]
     print(f"[entry:{run_id}] 开始执行 ({project}), 共 {len(tasks)} 个任务")
@@ -16,14 +16,14 @@ def run_tasks(run_id, project="开发模板", tasks=None, **kwargs):
                 e.notify()
                 results.append({"task": task, "status": "skipped", "reason": str(e)})
             except SystemException as e:
-                e.notify(extra_payload={"run_id": run_id})
+                e.notify(extra_payload={"run_id": run_id}, repo_path=repo_path)
                 return {"status": "failed", "message": f"系统异常: {e}", "data": {"results": results, "failed_task": task}}
         all_ok = all(r["status"] == "ok" for r in results)
         return {"status": "success" if all_ok else "warning", "message": "处理完成", "data": {"run_id": run_id, "results": results}}
     except Exception as e:
         se = SystemException(str(e), project=project, payload={"run_id": run_id})
         se.traceback_str = traceback.format_exc()
-        se.notify()
+        se.notify(repo_path=repo_path)
         return {"status": "failed", "message": f"未捕获: {e}", "data": None}
 
 def _process_single_task(task, project):

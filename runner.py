@@ -59,6 +59,7 @@ def execute(run_id: str, repo_path: str, project: str = "开发模板",
             run_id=run_id,
             project=project,
             tasks=tasks,
+            repo_path=repo_path,
         )
 
     except Exception as e:

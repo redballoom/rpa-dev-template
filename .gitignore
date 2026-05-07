@@ -1,32 +1,38 @@
-# ── Python ──
+# ── 运行时数据（IPC 协议文件）───────────────────────────────
+# 影刀 ↔ Python 握手状态文件，每次运行独立
+data/
+runner_*.json
+
+# ── Python 缓存 ──────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.egg-info/
-.venv/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# ── 虚拟环境 ────────────────────────────────────────────────
 venv/
-.env
-*.db
-*.sqlite3
+.venv/
+ENV/
+env/
+.env                          # 敏感配置（勿提交）
 
-# ── 影刀 RPA ──
-*.log
-*.tmp
-screenshots/
-debug/
-output/
-
-# ── 系统文件 ──
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ── IDE ──
-.idea/
+# ── IDE / 系统 ───────────────────────────────────────────────
 .vscode/
+.idea/
 *.swp
 *.swo
+*~
+.DS_Store
+Thumbs.db
 
-# ── 数据（含敏感业务数据） ──
-data/*.json
-data/*.csv
-!data/.gitkeep
+# ── 工作空间元数据（WorkBuddy 自管理）───────────────────────
+.workbuddy/
+
+# ── 第三方依赖（按需启用）───────────────────────────────────
+# node_modules/
+# dist/
+# build/
+# *.egg-info/

@@ -2,9 +2,9 @@
 tests/test_exception_routing.py - 异常路由全链路测试
 =====================================================
 测试场景:
-  1. 正常任务 -> success
-  2. 业务异常 (BusinessException) -> L1 飞书通知, warning
-  3. 系统异常 (SystemException)   -> L2 飞书告警, failed
+  1. 正常任务          -> success
+  2. 业务异常          -> L1 飞书黄牌，warning（跳过继续）
+  3. 系统异常          -> L2 Linear 工单，failed（强制退出）
 """
 
 import sys
@@ -51,7 +51,7 @@ def test_business_exception():
 
 def test_system_exception():
     print("=" * 60)
-    print("[测试 3] 系统异常 (L2 飞书告警 + 强制退出)")
+    print("[测试 3] 系统异常 (L2 Linear 工单 + 强制退出)")
     result = run_tasks(
         run_id="test-003",
         project="开发模板测试",
