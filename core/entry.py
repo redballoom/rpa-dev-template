@@ -93,20 +93,21 @@ def _process_single_task(task, project):
     """示例业务处理（实际业务模块替换此处）"""
     tid = task.get("id", 0)
     task_name = task.get("name", "未命名")
-    if tid < 0:
+    if tid <= 0:
         raise BusinessException(
             f"ID无效: {tid}",
             project=project,
             context={"task_id": tid, "task_name": task_name},
         )
-    if tid == 0:
+    # 测试用：_force_crash 标记触发 SystemException
+    if task.get("_force_crash"):
         raise SystemException(
-            message=f"task_id=0 不合法",
+            message=f"测试触发崩溃: {task_name}",
             project=project,
             payload={"task_id": tid, "task_name": task_name},
-            action=f"执行任务 [{task_name}]（处理阶段）",
-            expected="task_id 应为正整数，<0 走业务异常跳过",
-            actual=f"收到 task_id=0，触发系统异常，流程中断",
+            action=f"执行任务 [{task_name}]（测试强制崩溃）",
+            expected="正常运行",
+            actual=f"测试强制中断，模拟系统异常",
         )
     return {"processed": tid}
 

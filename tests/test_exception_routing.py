@@ -44,21 +44,24 @@ def test_business_exception():
         project="开发模板测试",
         tasks=[
             {"id": 1, "name": "正常任务"},
-            {"id": -1, "name": "无效ID任务"},   # 触发 BusinessException
+            {"id": -1, "name": "无效ID任务"},   # 触发 BusinessException (负数)
+            {"id": 0, "name": "零ID任务"},      # 触发 BusinessException (零值, RPA-24 验证)
             {"id": 3, "name": "正常任务C"}
         ]
     )
     print(f"  status: {result['status']}")
     print(f"  message: {result['message']}")
-    # 业务异常不终止流程，3个任务都执行了
+    # 业务异常不终止流程，4个任务都执行了
     assert result["status"] == "warning"
     results = result["data"]["results"]
-    assert len(results) == 3
+    assert len(results) == 4
     assert results[1]["status"] == "skipped"
-    # 有1条警告
+    assert results[2]["status"] == "skipped"  # tid=0 也跳过
+    # 有2条警告（负数 + 零值）
     warnings = result["data"]["warnings"]
-    assert len(warnings) == 1
+    assert len(warnings) == 2
     assert "ID无效" in warnings[0]["message"]
+    assert "ID无效" in warnings[1]["message"]
     print("  [PASS]\n")
 
 
@@ -71,7 +74,7 @@ def test_system_exception():
         project="开发模板测试",
         tasks=[
             {"id": 1, "name": "正常任务"},
-            {"id": 0, "name": "触发崩溃"},     # 触发 SystemException
+            {"id": 99, "name": "触发崩溃", "_force_crash": True},     # 触发 SystemException
             {"id": 3, "name": "不会被执行"}
         ]
     )
@@ -100,7 +103,7 @@ def test_mixed():
         tasks=[
             {"id": 1, "name": "正常任务"},
             {"id": -1, "name": "无效ID"},       # BusinessException
-            {"id": 0, "name": "触发崩溃"},       # SystemException → 中断
+            {"id": 99, "name": "触发崩溃", "_force_crash": True},       # SystemException → 中断
             {"id": 3, "name": "不会被执行"}
         ]
     )
