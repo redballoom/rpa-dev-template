@@ -8,7 +8,7 @@
 * **Execution Layer（执行层 - 影刀/Shadowbot）：** 仅负责 UI 驱动交互（点击、输入）。严禁在其中编写复杂判断逻辑。
 * **Logic Layer（逻辑层 - Python 3.x）：** 负责 DOM 解析、数据清洗、正则匹配与异常路由。代码托管于本地/Git，作为唯一真相源。
 * **IPC Protocol（进程间通信）：** RPA 与 Python 之间严格通过 `runner_{run_id}.json` 进行状态握手（影刀生成 UUID 作为 run_id，Python 回写时必须携带），RPA 校验一致后判定执行有效，防止进程暴毙导致读取历史脏数据。
-* **Alert Layer（告警层 - 飞书）：** 负责 L1 业务监控通知（黄牌）。
+* **Alert Layer（告警层 - 飞书）：** 负责 L1 业务监控通知（黄牌）和 L2 系统异常通知（红色），采用**批量汇总模式**——执行完毕后一次性发送，不逐个轰炸。
 * **Issue Tracker（工单层 - Linear）：** 专门接收未经捕获的代码级 Bug，作为唤醒下游 AI Agent（如 Claude Code）进行代码自愈的触发器。
 
 ## 3. Core Mechanisms（核心运行机制）
@@ -16,8 +16,10 @@
 
 ### 3.1 异常分流路由（Exception Routing - 极其关键）
 系统在 `core/exceptions.py` 中定义了严格的异常层级，严禁混淆：
-* **`BusinessException`（业务异常）：** 如账号异常、金额超限。处理动作：**静默拦截 → 发送飞书 L1 黄牌通知 → 流程继续**。AI 严禁因业务异常修改逻辑代码。
-* **`SystemException`（系统级异常）：** 如 KeyError、DOM 结构变更引起的 AttributeError。处理动作：**捕获完整 Traceback & Payload → 仅在生产分支（main）自动创建 Linear 工单 → 强制中断进程**。
+* **`BusinessException`（业务异常）：** 如账号异常、金额超限。处理动作：**静默拦截 → 收集到 warnings 列表 → 流程继续**。AI 严禁因业务异常修改逻辑代码。
+* **`SystemException`（系统级异常）：** 如 KeyError、DOM 结构变更引起的 AttributeError。处理动作：**捕获完整 Traceback & Payload → 创建 Linear 工单（仅生产分支） → 收集到 errors 列表 → 强制中断进程**。
+
+> **通知策略：批量汇总模式。** 不再逐个即时发送飞书消息。所有 BusinessException 和 SystemException 在执行过程中被收集，执行完毕后由 `send_execution_summary()` 一次性发送飞书汇总卡片。全部成功时静默不通知。
 
 > **分支感知逻辑：** 测试分支（fix/bug-test）下 SystemException 不会创建 Linear 工单，避免调试期间的误报污染工单系统。
 
@@ -41,7 +43,7 @@ RPA 在每次调用 Python 前会生成全局唯一的 UUID（`run_id`）并注�
 │   ├── __init__.py
 │   ├── entry.py              # 业务执行入口点（被 runner 调用，包含全局 try-except 兜底）
 │   ├── exceptions.py         # 自定义异常类（BusinessException, SystemException）
-│   ├── notifier.py           # 消息通知网关（飞书 L1 黄牌 + Linear 工单，含分支感知）
+│   ├── notifier.py           # 消息通知网关（飞书批量汇总 + Linear 工单，含分支感知）
 │   └── config.py             # 配置加载（优先读 project.json，fallback 默认值）
 ├── commands/                 # 可插拔业务命令模块（新业务代码写在这里）
 │   ├── __init__.py           # 命令注册表（COMMAND_REGISTRY）
@@ -55,10 +57,13 @@ RPA 在每次调用 Python 前会生成全局唯一的 UUID（`run_id`）并注�
 
 ## 5. Alert & Ticket Routing（告警与工单路由）
 
+> **通知策略：批量汇总。** 异常不在触发时逐个通知，而是收集到列表中，执行完毕后由 `send_execution_summary()` 统一发送飞书消息。全部成功时静默不通知。
+
 | 异常类型 | 触发条件 | 通知动作 | 后续处理 |
 |----------|----------|----------|----------|
-| `BusinessException` | 数据不合规、规则阻断 | 飞书 L1 黄牌 | 跳过当前任务，继续执行 |
-| `SystemException` | 代码级 Bug（DOM 变更、未捕获异常） | 仅 Linear 工单（生产分支） | 强制中断，流程终止 |
+| `BusinessException` | 数据不合规、规则阻断 | 收集到 warnings 列表 → 飞书汇总（黄色卡片） | 跳过当前任务，继续执行 |
+| `SystemException` | 代码级 Bug（DOM 变更、未捕获异常） | 创建 Linear 工单（仅 main） + 收集到 errors 列表 → 飞书汇总（红色卡片） | 强制中断，流程终止 |
+| 全部成功 | 所有任务正常完成 | **不发通知**（静默） | 继续 |
 
 > **生产分支判断：** `git rev-parse --abbrev-ref HEAD` 返回 `main` 时视为生产环境。测试分支（fix/bug-test）下 SystemException 不创建 Linear 工单。
 

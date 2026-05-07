@@ -3,7 +3,7 @@ import requests
 import json
 import traceback
 import sys
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 try:
     if hasattr(sys.stdout, "encoding") and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
@@ -23,12 +23,111 @@ from core.config import (
 )
 
 
-# ── 飞书：业务异常黄牌（L1）───────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+#  飞书通知：批量汇总模式（L1 警告 + L2 异常 合并发送）
+# ════════════════════════════════════════════════════════════════
+
+def send_execution_summary(
+    project: str,
+    run_id: str,
+    total: int,
+    success_count: int,
+    warnings: List[Dict[str, Any]],
+    errors: List[Dict[str, Any]],
+) -> bool:
+    """
+    飞书执行汇总通知（一次说完，不再逐个轰炸）。
+
+    三种场景：
+    1. 全部成功 → 不发送（静默）
+    2. 有警告无异常 → 📊 黄色卡片
+    3. 有系统异常   → 🔴 红色卡片
+
+    Args:
+        project:       项目名称
+        run_id:        本次运行 ID
+        total:         任务总数
+        success_count: 成功数
+        warnings:      BusinessException 收集列表，每项 {task, message, context}
+        errors:        SystemException 收集列表，每项 {task, message, error_type, issue_url}
+    """
+    # 全部成功 → 静默
+    if not warnings and not errors:
+        print(f"[notifier] 全部成功 ({success_count}/{total})，跳过飞书通知")
+        return True
+
+    warn_count = len(warnings)
+    err_count = len(errors)
+    has_error = err_count > 0
+
+    # ── 标题 ──
+    title = (
+        f"🔴 [{project}] 执行中断 {run_id}"
+        if has_error
+        else f"📊 [{project}] 执行报告 {run_id}"
+    )
+    template = "red" if has_error else "yellow"
+
+    # ── 统计行 ──
+    stat_parts = [f"✅ 成功 {success_count}/{total}"]
+    if warn_count:
+        stat_parts.append(f"⚠️ 跳过 {warn_count}")
+    if err_count:
+        stat_parts.append(f"🔴 异常 {err_count}")
+    stat_line = "  ".join(stat_parts)
+
+    # ── 构建内容块 ──
+    elements = [{"tag": "markdown", "content": stat_line}]
+
+    # 异常明细
+    if errors:
+        err_lines = []
+        for err in errors:
+            task_name = err.get("task", {}).get("name", "未知任务")
+            msg = err.get("message", "未知错误")[:80]
+            error_type = err.get("error_type", "")
+            issue_url = err.get("issue_url", "")
+            line = f"**· 任务[{task_name}]** → {error_type}: {msg}"
+            if issue_url:
+                line += f"\n  → [查看工单]({issue_url})"
+            err_lines.append(line)
+        elements.append({
+            "tag": "markdown",
+            "content": "**🔴 异常明细**\n" + "\n".join(err_lines),
+        })
+
+    # 警告明细
+    if warnings:
+        warn_lines = []
+        for w in warnings:
+            task_name = w.get("task", {}).get("name", "未知任务")
+            msg = w.get("message", "")[:80]
+            warn_lines.append(f"**· 任务[{task_name}]** → {msg}")
+        elements.append({
+            "tag": "markdown",
+            "content": "**⚠️ 跳过明细**\n" + "\n".join(warn_lines),
+        })
+
+    content = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": template,
+            },
+            "elements": elements,
+        },
+    }
+    return _feishu_post(content)
+
+
+# ── 飞书：单条业务异常通知（保留，供独立调用）────────────────
 
 def send_business_alert(project: str, message: str, context: Optional[Dict[str, Any]] = None) -> bool:
     """
-    飞书 L1 业务异常提醒（黄牌）。
-    BusinessException 触发，跳过继续执行。
+    飞书单条业务异常提醒（黄牌）。
+    注意：批量模式下不使用此函数，由 send_execution_summary 汇总发送。
+    此函数仅用于需要独立发送单条通知的特殊场景。
     """
     content = {
         "msg_type": "interactive",
@@ -207,13 +306,13 @@ def create_linear_issue(
         actual:         实际结果：这次失败造成了什么
 
     Returns:
-        bool: 工单是否创建成功
+        dict: {"success": bool, "issue_url": str}
     """
     # 测试分支不创建工单
     if repo_path and not _is_production_env(repo_path):
         branch = _get_current_branch(repo_path)
         print(f"[notifier] INFO: branch [{branch}] is test env, skip Linear issue")
-        return True
+        return {"success": True, "issue_url": ""}
 
     project_id = _ensure_linear_project()
 
@@ -322,14 +421,14 @@ def create_linear_issue(
             issue_url = result["data"]["issueCreate"]["issue"]["url"]
             proj_info = f" (项目: {LINEAR_PROJECT_NAME})" if project_id else ""
             print(f"[notifier] ✅ Linear 工单创建成功{proj_info}: {issue_url}")
-            return True
+            return {"success": True, "issue_url": issue_url}
         else:
             print(f"[notifier] ❌ Linear 工单创建失败: {result}")
-            return False
+            return {"success": False, "issue_url": ""}
 
     except Exception as e:
         print(f"[notifier] ❌ Linear 请求异常: {e}")
-        return False
+        return {"success": False, "issue_url": ""}
 
 
 # ── 内部工具 ────────────────────────────────────────────────

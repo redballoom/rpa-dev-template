@@ -24,7 +24,7 @@
 ├── core/                      # ← 你的主战场
 │   ├── entry.py               # 业务入口（调度任务）
 │   ├── exceptions.py          # 异常定义（你要用这两个类）
-│   ├── notifier.py            # 告警（不用管）
+│   ├── notifier.py            # 告警（批量汇总飞书 + Linear 工单，不用管）
 │   └── config.py              # 配置加载（不用管）
 │
 ├── commands/                  # ← 业务模块写在这里
@@ -168,6 +168,8 @@ def _process_single_task(task, project):
 
 ## 4. 异常使用规范（极其重要）
 
+> **通知机制：批量汇总模式。** 异常不会在触发时逐个发送飞书消息，而是由框架收集后统一发送。你只需要正确抛出异常，不需要关心通知逻辑。
+
 ### BusinessException — 业务异常，跳过继续
 
 **什么时候用**：数据本身有问题（格式错误、不在范围内、业务规则不满足）
@@ -176,12 +178,14 @@ def _process_single_task(task, project):
 raise BusinessException(
     message="简要描述问题",
     project="项目名称",          # 从 task 配置中获取
-    context={                   # 诊断上下文（会发到飞书）
+    context={                   # 诊断上下文（汇总到飞书卡片）
         "tracking_no": "xxx",
         "reason": "单号已过期",
     },
 )
 ```
+
+> 注意：`context` 中的内容会出现在飞书汇总通知的"跳过明细"中。
 
 ### SystemException — 系统异常，中断报工单
 
@@ -191,7 +195,7 @@ raise BusinessException(
 raise SystemException(
     message="简要描述报错",
     project="项目名称",
-    payload={                   # 诊断上下文（会发到 Linear）
+    payload={                   # 诊断上下文（写入 Linear 工单）
         "url": "https://...",
         "raw_response": "...",
     },
@@ -204,6 +208,8 @@ raise SystemException(
 > **三要素必填**：`action` / `expected` / `actual` 是工单质量的核心。
 > 不填会导致 Linear 工单信息不足，AI 修复时需要额外沟通。
 > `actual` 可以省略（默认用 message 兜底），但 `action` 和 `expected` 必须填。
+
+> 注意：SystemException 会自动创建 Linear 工单 + 中断后续任务 + 出现在飞书汇总通知的"异常明细"中。
 
 ### 兜底异常处理
 

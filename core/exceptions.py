@@ -1,15 +1,19 @@
 """
 core/exceptions.py — 异常路由分流器
 ====================================
-L1: BusinessException -> 飞书黄牌，跳过继续
-L2: SystemException   -> Linear 工单，强制退出
+L1: BusinessException -> 收集跳过，汇总后通过飞书一次性通知
+L2: SystemException   -> 创建 Linear 工单 + 收集，汇总后通过飞书通知
+
+通知策略：批量汇总模式
+    不再逐个即时发送飞书消息，而是在 entry.py 中收集所有异常，
+    执行完毕后由 send_execution_summary() 一次性汇总发送。
 """
 
 import traceback
 import os
 import re
 from typing import Optional, Dict, Any
-from core.notifier import send_business_alert, create_linear_issue
+from core.notifier import create_linear_issue
 
 
 def _parse_traceback(tb_str: str) -> Dict[str, Any]:
@@ -85,13 +89,17 @@ class BusinessException(Exception):
         self.context = context or {}
         self.category = "business"
 
-    def notify(self) -> bool:
-        """触发飞书 L1 黄牌通知"""
-        return send_business_alert(
-            project=self.project,
-            message=str(self),
-            context=self.context,
-        )
+    def notify(self) -> dict:
+        """
+        返回结构化信息供 entry.py 收集，不再直接发飞书。
+        飞书通知由 send_execution_summary() 汇总发送。
+        """
+        return {
+            "category": "business",
+            "message": str(self),
+            "project": self.project,
+            "context": self.context,
+        }
 
 
 class SystemException(Exception):
@@ -153,26 +161,39 @@ class SystemException(Exception):
         self.error_line = parsed["line_no"]
         self.error_code = parsed["code_line"]
 
-    def notify(self, extra_payload: Optional[dict] = None, repo_path: str = ".") -> bool:
-        """触发 Linear 工单创建"""
+    def notify(self, extra_payload: Optional[dict] = None, repo_path: str = ".") -> dict:
+        """
+        创建 Linear 工单，并返回结构化信息供 entry.py 收集。
+        飞书通知由 send_execution_summary() 汇总发送。
+        """
         merged = {**self.payload}
         if extra_payload:
             merged.update(extra_payload)
 
-        return create_linear_issue(
+        # 创建 Linear 工单（测试环境会跳过）
+        issue_url = ""
+        issue_success = create_linear_issue(
             error_msg=str(self),
             trace=self.traceback_str,
             payload_data=merged if merged else {},
             project=self.project,
             repo_path=repo_path,
-            # 结构化上下文
             error_type=self.error_type,
             error_file=self.error_file,
             error_function=self.error_function,
             error_line=self.error_line,
             error_code=self.error_code,
-            # 业务上下文
             action=self.action,
             expected=self.expected,
             actual=self.actual,
         )
+
+        return {
+            "category": "system",
+            "message": str(self),
+            "project": self.project,
+            "error_type": self.error_type,
+            "error_file": self.error_file,
+            "issue_success": issue_success,
+            "issue_url": issue_url,
+        }
