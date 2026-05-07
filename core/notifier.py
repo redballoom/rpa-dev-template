@@ -13,7 +13,14 @@ try:
 except AttributeError:
     pass
 
-from core.config import FEISHU_WEBHOOK, LINEAR_API_KEY, LINEAR_TEAM_ID, LINEAR_GRAPHQL_URL
+from core.config import (
+    FEISHU_WEBHOOK,
+    LINEAR_API_KEY,
+    LINEAR_TEAM_ID,
+    LINEAR_GRAPHQL_URL,
+    LINEAR_PROJECT_NAME,
+    LINEAR_PROJECT_ID,
+)
 
 
 # ── 飞书：业务异常黄牌（L1）───────────────────────────────────
@@ -62,6 +69,90 @@ def _is_production_env(repo_path: str = ".") -> bool:
     return _get_current_branch(repo_path) == "main"
 
 
+def _linear_request(query: str, variables: dict = None) -> Optional[dict]:
+    """Linear GraphQL 请求封装，返回 data 层或 None"""
+    try:
+        payload = {"query": query}
+        if variables:
+            payload["variables"] = variables
+        response = requests.post(
+            LINEAR_GRAPHQL_URL,
+            headers={
+                "Authorization": LINEAR_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=15,
+        )
+        result = response.json()
+        if "errors" in result:
+            print(f"[notifier] ❌ GraphQL 错误: {result['errors']}")
+            return None
+        return result.get("data")
+    except Exception as e:
+        print(f"[notifier] ❌ Linear 请求异常: {e}")
+        return None
+
+
+# ── Linear 项目管理 ──────────────────────────────────────────
+
+def _ensure_linear_project() -> Optional[str]:
+    """
+    确保 Linear Project 存在，返回 project_id。
+
+    逻辑：
+    1. 如果 config 中已配置 LINEAR_PROJECT_ID，直接使用
+    2. 否则按 LINEAR_PROJECT_NAME 查询
+    3. 查不到则自动创建
+    """
+    # 1. 优先使用已知的 project_id
+    if LINEAR_PROJECT_ID:
+        return LINEAR_PROJECT_ID
+
+    # 2. 按名称查找
+    query = """
+    query FindProject($name: String!) {
+      projects(filter: {name: {eq: $name}}) {
+        nodes {
+          id
+          name
+          state
+        }
+      }
+    }
+    """
+    data = _linear_request(query, {"name": LINEAR_PROJECT_NAME})
+    if data:
+        nodes = data.get("projects", {}).get("nodes", [])
+        if nodes:
+            project_id = nodes[0]["id"]
+            print(f"[notifier] 📂 已找到 Linear 项目: {nodes[0]['name']} ({project_id})")
+            return project_id
+
+    # 3. 项目不存在，自动创建
+    print(f"[notifier] 📂 项目 [{LINEAR_PROJECT_NAME}] 不存在，自动创建...")
+    mutation = """
+    mutation CreateProject($name: String!, $teamIds: [String!]!) {
+      projectCreate(input: {name: $name, teamIds: $teamIds}) {
+        success
+        project {
+          id
+          name
+        }
+      }
+    }
+    """
+    data = _linear_request(mutation, {"name": LINEAR_PROJECT_NAME, "teamIds": [LINEAR_TEAM_ID]})
+    if data and data.get("projectCreate", {}).get("success"):
+        project = data["projectCreate"]["project"]
+        project_id = project["id"]
+        print(f"[notifier] 📂 ✅ 项目创建成功: {project['name']} ({project_id})")
+        return project_id
+
+    print("[notifier] ❌ Linear 项目查找/创建失败，工单将不关联项目")
+    return None
+
+
 # ── Linear：系统 Bug 工单（L2）───────────────────────────────
 
 def create_linear_issue(
@@ -72,15 +163,19 @@ def create_linear_issue(
     repo_path: str = ".",
 ) -> bool:
     """
-    将 Python 系统 Bug 推送为 Linear 工单。
+    将 Python 系统 Bug 推送为 Linear 工单，并关联到对应项目。
 
-    路由目标：SystemException 触发时调用（不再走飞书红牌）。
+    流程：
+    1. 检查分支（测试环境跳过）
+    2. 检查/创建 Linear Project
+    3. 创建 Issue 并关联 Project
 
     Args:
         error_msg:  报错信息摘要（用于工单标题）
         trace:      traceback.format_exc() 堆栈
         payload_data: 触发时的入参载荷
         project:    项目名称（用于标题前缀）
+        repo_path:  仓库路径，用于判断当前分支
 
     Returns:
         bool: 工单是否创建成功
@@ -91,6 +186,9 @@ def create_linear_issue(
         print(f"[notifier] ℹ️ 当前分支 [{branch}] 为测试环境，跳过 Linear 工单创建")
         return True
 
+    # 检查/获取 project_id
+    project_id = _ensure_linear_project()
+
     title = f"🐛 [RPA Bug] {error_msg.split(':')[0]}"
     description = (
         f"**报错信息:**\n{error_msg}\n\n"
@@ -98,9 +196,10 @@ def create_linear_issue(
         f"**输入参数载荷:**\n```json\n{json.dumps(payload_data, ensure_ascii=False, indent=2)}\n```"
     )
 
+    # 创建 Issue 并关联 Project
     mutation = """
-    mutation IssueCreate($title: String!, $description: String!, $teamId: String!) {
-      issueCreate(input: {title: $title, description: $description, teamId: $teamId}) {
+    mutation IssueCreate($title: String!, $description: String!, $teamId: String!, $projectId: String) {
+      issueCreate(input: {title: $title, description: $description, teamId: $teamId, projectId: $projectId}) {
         success
         issue {
           id
@@ -115,6 +214,7 @@ def create_linear_issue(
         "title": title,
         "description": description,
         "teamId": LINEAR_TEAM_ID,
+        "projectId": project_id,
     }
 
     try:
@@ -131,7 +231,8 @@ def create_linear_issue(
 
         if result.get("data", {}).get("issueCreate", {}).get("success"):
             issue_url = result["data"]["issueCreate"]["issue"]["url"]
-            print(f"[notifier] ✅ Linear 工单创建成功: {issue_url}")
+            proj_info = f" (项目: {LINEAR_PROJECT_NAME})" if project_id else ""
+            print(f"[notifier] ✅ Linear 工单创建成功{proj_info}: {issue_url}")
             return True
         else:
             print(f"[notifier] ❌ Linear 工单创建失败: {result}")
