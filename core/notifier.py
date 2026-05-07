@@ -61,6 +61,19 @@ def _get_current_branch(repo_path: str = ".") -> str:
         return "unknown"
 
 
+def _get_current_commit(repo_path: str = ".") -> str:
+    """获取当前 Git 短 commit hash，读失败时返回 'unknown'"""
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["git", "-C", repo_path, "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True,
+        )
+        return res.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
 def _is_production_env(repo_path: str = ".") -> bool:
     """
     检查当前 Git 分支是否为生产环境（main）。
@@ -161,6 +174,14 @@ def create_linear_issue(
     payload_data: Dict[str, Any],
     project: str = "RPA",
     repo_path: str = ".",
+    error_type: str = "",
+    error_file: str = "",
+    error_function: str = "",
+    error_line: str = "",
+    error_code: str = "",
+    action: str = "",
+    expected: str = "",
+    actual: str = "",
 ) -> bool:
     """
     将 Python 系统 Bug 推送为 Linear 工单，并关联到对应项目。
@@ -171,30 +192,98 @@ def create_linear_issue(
     3. 创建 Issue 并关联 Project
 
     Args:
-        error_msg:  报错信息摘要（用于工单标题）
-        trace:      traceback.format_exc() 堆栈
-        payload_data: 触发时的入参载荷
-        project:    项目名称（用于标题前缀）
-        repo_path:  仓库路径，用于判断当前分支
+        error_msg:      报错信息摘要
+        trace:          traceback 堆栈
+        payload_data:   触发时的入参载荷
+        project:        项目名称
+        repo_path:      仓库路径
+        error_type:     异常类型
+        error_file:     出错文件
+        error_function: 出错函数名
+        error_line:     出错行号
+        error_code:     出错代码行
+        action:         触发动作：正在做什么时出错
+        expected:       预期结果：系统本来应该怎样
+        actual:         实际结果：这次失败造成了什么
 
     Returns:
         bool: 工单是否创建成功
     """
-    # 测试分支（fix/bug-test）不创建工单，仅打印提示
+    # 测试分支不创建工单
     if repo_path and not _is_production_env(repo_path):
         branch = _get_current_branch(repo_path)
-        print(f"[notifier] ℹ️ 当前分支 [{branch}] 为测试环境，跳过 Linear 工单创建")
+        print(f"[notifier] INFO: branch [{branch}] is test env, skip Linear issue")
         return True
 
-    # 检查/获取 project_id
     project_id = _ensure_linear_project()
 
-    title = f"🐛 [RPA Bug] {error_msg.split(':')[0]}"
-    description = (
-        f"**报错信息:**\n{error_msg}\n\n"
-        f"**报错堆栈:**\n```python\n{trace}\n```\n\n"
-        f"**输入参数载荷:**\n```json\n{json.dumps(payload_data, ensure_ascii=False, indent=2)}\n```"
+    # ── 工单标题 ─────────────────────────────────────────────
+    # 优先级：action > error_type + file > error_msg
+    if action and error_type:
+        title = f"[Bug] {action} 失败 - {error_type}"
+    elif error_type and error_file:
+        short_file = error_file.replace("\\", "/")
+        title = f"[Bug] {error_type} in {short_file}:{error_function}()"
+    elif error_type:
+        title = f"[Bug] {error_type}: {error_msg.split(chr(10))[0][:60]}"
+    else:
+        title = f"[Bug] {error_msg.split(':')[0][:60]}"
+
+    # ── 工单描述 ─────────────────────────────────────────────
+    branch = _get_current_branch(repo_path)
+    commit = _get_current_commit(repo_path)
+
+    parts = []
+
+    # 1. 业务上下文（最重要的定位信息，放在最前面）
+    if action or expected or actual:
+        parts.append("## 业务上下文")
+        ctx_lines = ["| 项目 | 内容 |", "|------|------|"]
+        if action:
+            ctx_lines.append(f"| **触发动作** | {action} |")
+        if expected:
+            ctx_lines.append(f"| **预期结果** | {expected} |")
+        if actual:
+            ctx_lines.append(f"| **实际结果** | {actual} |")
+        parts.append("\n".join(ctx_lines))
+
+    # 2. 错误摘要
+    parts.append("\n## 错误摘要")
+    summary_lines = ["| 项目 | 值 |", "|------|------|"]
+    summary_lines.append(f"| 异常类型 | `{error_type or 'Unknown'}` |")
+    summary_lines.append(f"| 出错文件 | `{error_file or 'Unknown'}` |")
+    summary_lines.append(f"| 出错函数 | `{error_function or 'Unknown'}` |")
+    if error_line:
+        summary_lines.append(f"| 行号 | L{error_line} |")
+    summary_lines.append(f"| 所属项目 | {project} |")
+    summary_lines.append(f"| 环境 | `{branch}@{commit}` |")
+    parts.append("\n".join(summary_lines))
+
+    # 3. 出错代码
+    if error_code:
+        parts.append(
+            f"\n## 出错代码\n```python\n# {error_file} L{error_line}\n{error_code}\n```"
+        )
+
+    # 4. 报错信息
+    parts.append(f"\n## 报错信息\n```\n{error_msg}\n```")
+
+    # 5. 堆栈追踪（折叠）
+    parts.append(
+        "\n## 堆栈追踪\n<details>\n\n```python\n{}\n```\n\n</details>".format(
+            trace or "无堆栈信息（手动 raise 的异常，无真实栈帧）"
+        )
     )
+
+    # 6. 输入参数
+    if payload_data:
+        parts.append(
+            "\n## 输入参数\n```json\n{}\n```".format(
+                json.dumps(payload_data, ensure_ascii=False, indent=2)
+            )
+        )
+
+    description = "\n".join(parts)
 
     # 创建 Issue 并关联 Project
     mutation = """

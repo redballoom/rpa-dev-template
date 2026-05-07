@@ -31,20 +31,24 @@ RPA 在每次调用 Python 前会生成全局唯一的 UUID（`run_id`）并注�
 
 ```
 .
-├── git_controller.py        # Git 动态路由调度（影刀入口：切换 main / fix/bug-test）
-├── runner.py                # 影刀唯一调用入口（负责热重载、IPC JSON 落盘）
-├── run.bat                  # Windows 一键启动脚本
-├── core/                    # 核心逻辑库
+├── AI_SYSTEM_PROMPT.md       # 本文件（AI 上下文）
+├── CONTRIBUTING.md           # 业务模块编写指南（新 AI 必读）
+├── project.json              # 项目运行配置（影刀生成，Python 读取）
+├── git_controller.py         # Git 动态路由调度（影刀入口：切换 main / fix/bug-test）
+├── runner.py                 # 影刀唯一调用入口（负责热重载、IPC JSON 落盘）
+├── run.bat                   # Windows 一键启动脚本
+├── core/                     # 核心逻辑库
 │   ├── __init__.py
-│   ├── entry.py             # 业务执行入口点（被 runner 调用，包含全局 try-except 兜底）
-│   ├── exceptions.py        # 自定义异常类（BusinessException, SystemException）
-│   ├── notifier.py          # 消息通知网关（飞书 L1 黄牌 + Linear 工单，含分支感知）
-│   └── config.py            # 敏感配置集中管理（飞书 Webhook、Linear API Key 等）
-├── commands/                # 可插拔业务命令模块（规划中）
-│   └── __init__.py
-├── tests/                   # 单元测试
+│   ├── entry.py              # 业务执行入口点（被 runner 调用，包含全局 try-except 兜底）
+│   ├── exceptions.py         # 自定义异常类（BusinessException, SystemException）
+│   ├── notifier.py           # 消息通知网关（飞书 L1 黄牌 + Linear 工单，含分支感知）
+│   └── config.py             # 配置加载（优先读 project.json，fallback 默认值）
+├── commands/                 # 可插拔业务命令模块（新业务代码写在这里）
+│   ├── __init__.py           # 命令注册表（COMMAND_REGISTRY）
+│   └── ...                   # 业务模块（如 track_order.py）
+├── tests/                    # 单元测试
 │   └── test_exception_routing.py
-├── data/                    # 运行时数据（runner_{run_id}.json 等，.gitignore 忽略）
+├── data/                     # 运行时数据（.gitignore 忽略）
 ├── .gitignore
 └── requirements.txt
 ```
@@ -97,7 +101,13 @@ python runner.py --run_id <UUID> --repo_path <项目路径> --project <项目名
 
 1. **Do not break the IPC Contract：** 任何你编写的 Python 业务模块，其最终状态必须能够封装进字典并由 `runner.py` 写入 JSON。
 2. **Respect Exception Hierarchy：** 遇到不符合预期的输入时，请仔细判断。如果是数据本身不合规，抛出 `BusinessException`；如果是目标系统的数据结构变了，抛出 `SystemException`（或让兜底逻辑捕获）。绝对不能使用 `raise Exception` 破坏分流。
-3. **Provide Context for Self-Healing：** 如果你在编写抛出 `SystemException` 的代码，必须尽可能通过 `payload` 参数注入当时的"毒性上下文（如引发崩溃的 JSON/HTML 片段）"，以便后续在 Linear 中能完美复现。
+3. **Provide Context for Self-Healing：** 如果你在编写抛出 `SystemException` 的代码，必须通过以下参数注入上下文：
+   - `payload`（dict）：当时的"毒性上下文"（如引发崩溃的 JSON/HTML 片段）
+   - `action`（str）：**必填**，正在做什么时出错（如"查询物流单号 HK001 的状态"）
+   - `expected`（str）：**必填**，系统本来应该怎样（如"返回 JSON 响应"）
+   - `actual`（str）：实际发生了什么（如"HTTP 500 内部错误"，可省略，默认用 message）
+   
+   > **详细用法和完整示例参见 [CONTRIBUTING.md](CONTRIBUTING.md)**
 4. **No UI Logic in Python：** 不要试图在 Python 中引入 `selenium` 或 `playwright`，所有的浏览器驱动动作全都在外层的 RPA 软件中完成，Python 只做纯数据计算。
 5. **Branch-Aware Ticket Creation：** 在创建 Linear 工单前，系统会自动判断当前 Git 分支。测试环境不创建工单，这是预期行为，不需要修复。
 

@@ -28,10 +28,22 @@ def run_tasks(run_id, project="开发模板", tasks=None, repo_path=".", **kwarg
 
 def _process_single_task(task, project):
     tid = task.get("id", 0)
+    task_name = task.get("name", "未命名")
     if tid < 0:
-        raise BusinessException(f"ID无效: {tid}", project=project, context={"task_id": tid})
+        raise BusinessException(
+            f"ID无效: {tid}",
+            project=project,
+            context={"task_id": tid, "task_name": task_name},
+        )
     if tid == 0:
-        raise SystemException("ID为0", project=project, payload={"task_id": tid})
+        raise SystemException(
+            message=f"task_id=0 不合法",
+            project=project,
+            payload={"task_id": tid, "task_name": task_name},
+            action=f"执行任务 [{task_name}]（处理阶段）",
+            expected="task_id 应为正整数，<0 走业务异常跳过",
+            actual=f"收到 task_id=0，触发系统异常，流程中断",
+        )
     return {"processed": tid}
 
 if __name__ == "__main__":
