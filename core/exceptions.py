@@ -23,14 +23,13 @@ def _parse_traceback(tb_str: str) -> Dict[str, Any]:
     if exc_match:
         result["error_type"] = exc_match.group(1)
         result["error_message"] = exc_match.group(2).strip()
-    frames = re.findall(r'File "(.+?)", line (\d+), in (\w+)\s*
-\s*(.+)', tb_str)
+    frames = re.findall(r'File "(.+?)", line (\d+), in (\w+)', tb_str)
     for f in frames:
-        result["frames"].append({"file": f[0], "line": f[1], "function": f[2], "code": f[3].strip()})
+        result["frames"].append({"file": f[0], "line": f[1], "function": f[2], "code": ""})
     if frames:
         last = frames[-1]
         result["file"] = last[0]; result["line_no"] = last[1]
-        result["function"] = last[2]; result["code_line"] = last[3].strip()
+        result["function"] = last[2]; result["code_line"] = ""
     return result
 
 
