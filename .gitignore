@@ -38,3 +38,7 @@ Thumbs.db
 # dist/
 # build/
 # *.egg-info/
+
+crash_snapshots/
+
+.runner.lock

@@ -1,26 +1,8 @@
 """
-runner.py — 影刀 CLI 入口 (BAT 模式)
-======================================
-影刀通过 BAT 调用此脚本，输出 JSON 状态文件供影刀读取。
-
-BAT 示例:
-    python runner.py --run_id 20260506_001 --repo_path D:/RPA_Project
-    python runner.py --run_id 20260506_001 --repo_path D:/RPA_Project --project 物流项目
-
-影刀内的 4 步编排:
-    1. 生成 run_id
-    2. 调用 BAT: python runner.py --run_id %run_id% --repo_path D:/RPA_Project
-    3. 读取 runner_%run_id%.json
-    4. IF 判断 status -> success | warning | failed
+runner.py - Yingdao RPA CLI entry (BAT mode)
 """
+import sys, os, json, argparse, traceback
 
-import sys
-import os
-import json
-import argparse
-import traceback
-
-# Windows GBK 兼容
 try:
     if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
         import io
@@ -30,139 +12,144 @@ except AttributeError:
     pass
 
 
-def _load_project_config(repo_path: str) -> dict:
-    """
-    合并读取配置（template 为基准，project.json 覆盖）:
-      1. project.template.json  — 追踪版本控制，含 is_test_to_git_env
-      2. project.json           — gitignored，含 API Key 等敏感信息
-    """
+class _FileLock:
+    def __init__(self, lock_path):
+        self.lock_path = lock_path
+        self._acquired = False
+
+    def try_acquire(self, timeout=10):
+        import time
+        deadline = time.time() + max(timeout, 0)
+        tried = False
+        while not tried or time.time() < deadline:
+            tried = True
+            if self._try_lock():
+                self._acquired = True
+                return True
+            if timeout <= 0:
+                break
+            time.sleep(0.5)
+        return False
+
+    def _try_lock(self):
+        try:
+            my_pid = os.getpid()
+            if os.path.exists(self.lock_path):
+                with open(self.lock_path, "r") as f:
+                    content = f.read().strip()
+                if content:
+                    try:
+                        pid = int(content)
+                        if self._is_pid_alive(pid):
+                            return False
+                    except ValueError:
+                        pass
+            with open(self.lock_path, "w") as f:
+                f.write(str(my_pid))
+            with open(self.lock_path, "r") as f:
+                return f.read().strip() == str(my_pid)
+        except Exception:
+            return False
+
+    def _is_pid_alive(self, pid):
+        try:
+            if os.name == "nt":
+                import ctypes
+                h = ctypes.windll.kernel32.OpenProcess(0x0400, False, pid)
+                if h:
+                    ctypes.windll.kernel32.CloseHandle(h)
+                    return True
+                return False
+            else:
+                os.kill(pid, 0)
+                return True
+        except (OSError, AttributeError):
+            return False
+
+    def release(self):
+        if self._acquired and os.path.exists(self.lock_path):
+            try:
+                os.remove(self.lock_path)
+            except (OSError, PermissionError):
+                pass
+        self._acquired = False
+
+
+def _load_config(repo_path):
     config = {}
-
-    # 基准配置（模板，版本控制追踪）
-    template_path = os.path.join(repo_path, "project.template.json")
-    if os.path.exists(template_path):
-        try:
-            with open(template_path, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
-        except Exception as e:
-            print(f"[runner] 警告: 读取 project.template.json 失败: {e}")
-
-    # 覆盖配置（用户本地，含密钥，gitignored）
-    override_path = os.path.join(repo_path, "project.json")
-    if os.path.exists(override_path):
-        try:
-            with open(override_path, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
-        except Exception as e:
-            print(f"[runner] 警告: 读取 project.json 失败: {e}")
-
+    for fn in ["project.template.json", "project.json"]:
+        fp = os.path.join(repo_path, fn)
+        if os.path.exists(fp):
+            try:
+                with open(fp, "r", encoding="utf-8") as f:
+                    config.update(json.load(f))
+            except Exception as e:
+                print("[runner] warning: %s: %s" % (fn, e))
     return config
 
 
-def _switch_git_env(repo_path: str, config: dict) -> None:
-    """根据 project.json 的 is_test_to_git_env 切换 Git 分支"""
+def _switch_git(repo_path, config):
     is_test = config.get("is_test_to_git_env", False)
-    target_branch = "fix/bug-test" if is_test else "main"
-
+    target = "fix/bug-test" if is_test else "main"
     try:
         import git_controller
         import importlib
         importlib.reload(git_controller)
-
-        result = git_controller.switch_git_env(
-            is_test=is_test,
-            repo_path=repo_path,
-        )
-        if result.get("status") == "error":
-            print(f"[runner] Git 切换警告 ({target_branch}): {result.get('msg')}")
+        r = git_controller.switch_git_env(is_test=is_test, repo_path=repo_path)
+        if r.get("status") == "error":
+            print("[runner] Git warning (%s): %s" % (target, r.get("msg")))
         else:
-            print(f"[runner] Git 分支已确认: {target_branch}")
+            print("[runner] Git: %s" % target)
     except Exception as e:
-        print(f"[runner] Git 切换失败 (非阻断): {e}")
+        print("[runner] Git failed (non-blocking): %s" % e)
 
 
-def execute(run_id: str, repo_path: str, project: str = "开发模板",
-            tasks: list = None, output_dir: str = None) -> str:
-    """
-    影刀调用的唯一入口 (CLI)
-
-    Returns:
-        status.json 的绝对路径（影刀读取此文件判断结果）
-    """
-    # 1. 确保工作区在 sys.path
+def execute(run_id, repo_path, project="dev-template", tasks=None, output_dir=None):
     if repo_path in sys.path:
         sys.path.remove(repo_path)
     sys.path.insert(0, repo_path)
-
     if output_dir is None:
         output_dir = repo_path
     os.makedirs(output_dir, exist_ok=True)
-    status_file = os.path.join(output_dir, f"runner_{run_id}.json")
+    sf = os.path.join(output_dir, "runner_%s.json" % run_id)
+
+    lock = _FileLock(os.path.join(repo_path, ".runner.lock"))
+    if not lock.try_acquire(timeout=0):
+        rd = {"status": "locked", "message": "Locked: %s" % repo_path, "data": {"run_id": run_id}}
+        with open(sf, "w", encoding="utf-8") as f:
+            json.dump(rd, f, ensure_ascii=False, indent=2)
+        print("[runner] !! Locked: %s" % repo_path)
+        return sf
 
     try:
-        # 2. 读取 project.json 配置
-        config = _load_project_config(repo_path)
-        project_name = project or config.get("project", "开发模板")
-
-        # 3. 根据 is_test_to_git_env 切换 Git 分支
-        _switch_git_env(repo_path, config)
-
-        # 4. 导入业务入口，热重载
-        import core.entry as entry_module
+        cfg = _load_config(repo_path)
+        pn = project or cfg.get("project", "dev-template")
+        _switch_git(repo_path, cfg)
+        import core.entry as em
         import importlib
-        importlib.reload(entry_module)
-
-        # 5. 执行业务逻辑
-        result_dict = entry_module.run_tasks(
-            run_id=run_id,
-            project=project_name,
-            tasks=tasks,
-            repo_path=repo_path,
-        )
-
+        importlib.reload(em)
+        rd = em.run_tasks(run_id=run_id, project=pn, tasks=tasks, repo_path=repo_path)
     except Exception as e:
-        result_dict = {
-            "status": "fatal",
-            "message": f"Runner 崩溃: {e}",
-            "data": {"run_id": run_id, "traceback": traceback.format_exc()}
-        }
+        rd = {"status": "fatal", "message": "Runner crash: %s" % e,
+              "data": {"run_id": run_id, "traceback": traceback.format_exc()}}
+    finally:
+        lock.release()
 
-    # 4. 状态落盘 (JSON 握手文件)
-    with open(status_file, "w", encoding="utf-8") as f:
-        json.dump(result_dict, f, ensure_ascii=False, indent=2)
-
-    print(f"[runner] 状态已写入: {status_file}")
-    return status_file
+    with open(sf, "w", encoding="utf-8") as f:
+        json.dump(rd, f, ensure_ascii=False, indent=2)
+    print("[runner] Status: %s" % sf)
+    return sf
 
 
-# ========== CLI 入口 ==========
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="影刀 RPA -> Python 业务调度器")
-    parser.add_argument("--run_id", type=str, required=True, help="本次运行 Trace ID")
-    parser.add_argument("--repo_path", type=str, required=True, help="项目本地路径")
-    parser.add_argument("--project", type=str, default="开发模板", help="项目名称")
-    parser.add_argument("--output_dir", type=str, default="", help="结果输出目录（默认 repo_path）")
-
-    args = parser.parse_args()
-
-    # 示例任务（实际项目中可由影刀动态生成 JSON 文件传入）
-    sample_tasks = [
-        {"id": 1, "name": "正常任务"},
-        {"id": 2, "name": "正常任务B"},
-        # 取消注释下一行测试业务异常
-        # {"id": -1, "name": "无效ID"},
-        # 取消注释下一行测试系统异常
-        # {"id": 0, "name": "触发崩溃"},
-    ]
-
-    status_path = execute(
-        run_id=args.run_id,
-        repo_path=args.repo_path,
-        project=args.project,
-        tasks=sample_tasks,
-        output_dir=args.output_dir or args.repo_path,
-    )
-
-    # 标准输出也打印一份 JSON，影刀可捕获 stdout
-    with open(status_path, "r", encoding="utf-8") as f:
+    p = argparse.ArgumentParser(description="Yingdao RPA -> Python scheduler")
+    p.add_argument("--run_id", required=True)
+    p.add_argument("--repo_path", required=True)
+    p.add_argument("--project", default="dev-template")
+    p.add_argument("--output_dir", default="")
+    a = p.parse_args()
+    st = execute(run_id=a.run_id, repo_path=a.repo_path, project=a.project,
+                 tasks=[{"id": 1, "name": "normal"}, {"id": 2, "name": "normal-B"}],
+                 output_dir=a.output_dir or a.repo_path)
+    with open(st, "r", encoding="utf-8") as f:
         print(f.read())
