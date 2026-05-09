@@ -30,6 +30,57 @@ except AttributeError:
     pass
 
 
+def _load_project_config(repo_path: str) -> dict:
+    """
+    合并读取配置（template 为基准，project.json 覆盖）:
+      1. project.template.json  — 追踪版本控制，含 is_test_to_git_env
+      2. project.json           — gitignored，含 API Key 等敏感信息
+    """
+    config = {}
+
+    # 基准配置（模板，版本控制追踪）
+    template_path = os.path.join(repo_path, "project.template.json")
+    if os.path.exists(template_path):
+        try:
+            with open(template_path, "r", encoding="utf-8") as f:
+                config.update(json.load(f))
+        except Exception as e:
+            print(f"[runner] 警告: 读取 project.template.json 失败: {e}")
+
+    # 覆盖配置（用户本地，含密钥，gitignored）
+    override_path = os.path.join(repo_path, "project.json")
+    if os.path.exists(override_path):
+        try:
+            with open(override_path, "r", encoding="utf-8") as f:
+                config.update(json.load(f))
+        except Exception as e:
+            print(f"[runner] 警告: 读取 project.json 失败: {e}")
+
+    return config
+
+
+def _switch_git_env(repo_path: str, config: dict) -> None:
+    """根据 project.json 的 is_test_to_git_env 切换 Git 分支"""
+    is_test = config.get("is_test_to_git_env", False)
+    target_branch = "fix/bug-test" if is_test else "main"
+
+    try:
+        import git_controller
+        import importlib
+        importlib.reload(git_controller)
+
+        result = git_controller.switch_git_env(
+            is_test=is_test,
+            repo_path=repo_path,
+        )
+        if result.get("status") == "error":
+            print(f"[runner] Git 切换警告 ({target_branch}): {result.get('msg')}")
+        else:
+            print(f"[runner] Git 分支已确认: {target_branch}")
+    except Exception as e:
+        print(f"[runner] Git 切换失败 (非阻断): {e}")
+
+
 def execute(run_id: str, repo_path: str, project: str = "开发模板",
             tasks: list = None, output_dir: str = None) -> str:
     """
@@ -49,15 +100,22 @@ def execute(run_id: str, repo_path: str, project: str = "开发模板",
     status_file = os.path.join(output_dir, f"runner_{run_id}.json")
 
     try:
-        # 2. 导入业务入口，热重载
+        # 2. 读取 project.json 配置
+        config = _load_project_config(repo_path)
+        project_name = project or config.get("project", "开发模板")
+
+        # 3. 根据 is_test_to_git_env 切换 Git 分支
+        _switch_git_env(repo_path, config)
+
+        # 4. 导入业务入口，热重载
         import core.entry as entry_module
         import importlib
         importlib.reload(entry_module)
 
-        # 3. 执行业务逻辑
+        # 5. 执行业务逻辑
         result_dict = entry_module.run_tasks(
             run_id=run_id,
-            project=project,
+            project=project_name,
             tasks=tasks,
             repo_path=repo_path,
         )
