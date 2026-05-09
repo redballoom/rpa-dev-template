@@ -1,6 +1,8 @@
 # Architecture Improvement Review & Plan
 > Based on Gemini review of the RPA+AI self-healing architecture.
-> 2026-05-08
+> 2026-05-08 · Updated 2026-05-09
+
+**人机协助流程**: 详见 [`HUMAN_MACHINE_COLLAB.md`](HUMAN_MACHINE_COLLAB.md) — 影刀/后端/AI 三层职责划分
 
 ## Priority Summary
 

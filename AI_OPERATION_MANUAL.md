@@ -1,8 +1,9 @@
-# RPA 项目初始化 - AI 操作手册
+# RPA 项目初始化 — AI 操作手册
 
-> 版本: 1.0  
-> 最后更新: 2026-05-08  
+> 版本: 1.1  
+> 最后更新: 2026-05-09  
 > 用途: AI 代理按此手册步骤，从模板自动创建新的 RPA 项目
+> 关联文档: [人机协助流程](HUMAN_MACHINE_COLLAB.md) — 影刀/Python/AI 职责划分
 
 ---
 
@@ -87,8 +88,8 @@ python D:\CraftPJ\init_project.py --name {项目名} --remote git@github.com:red
 
 ### 3.1 检查关键文件
 
-```cmd
-dir /b D:\CraftPJ\{项目名}\
+```bash
+ls "D:\CraftPJ\{项目名}\"
 ```
 
 必须包含以下文件：
@@ -101,8 +102,8 @@ dir /b D:\CraftPJ\{项目名}\
 
 ### 3.2 校验 run.bat 内容
 
-```cmd
-type D:\CraftPJ\{项目名}\run.bat
+```bash
+cat "D:\CraftPJ\{项目名}\run.bat"
 ```
 
 检查点：
@@ -115,7 +116,7 @@ type D:\CraftPJ\{项目名}\run.bat
 
 ### 3.3 运行一次测试
 
-```cmd
+```bash
 cd /d D:\CraftPJ\{项目名}
 run.bat test_verify
 ```
@@ -125,12 +126,13 @@ run.bat test_verify
 - 输出目录出现 `runner_{run_id}.json` 文件
 - JSON 内容包含 `status` 字段
 
-> 注意：`status` 值可能是 `fatal`（测试用例故意抛出的异常），这属于**正常**。关键是有 JSON 输出文件。
+> 注意：`status` 值可能是 `success`（正常）、`fatal`（运行时错误）或 `warning`（业务跳过）。
+> 关键是有 JSON 输出文件。查看 `status` 了解具体结果。
 
 ### 3.4 清理测试产物
 
-```cmd
-del /q D:\CraftPJ\{项目名}\runner_*.json 2>nul
+```bash
+del /q "D:\CraftPJ\{项目名}\runner_*.json" 2>nul
 ```
 
 ---
@@ -152,12 +154,46 @@ Git 仓库: 已初始化 (首次 commit 完成)
   在影刀「运行或打开」指令中，填写:
     D:\CraftPJ\{项目名}\run.bat
 
-  在 runner.py 的 execute() 函数中编写业务逻辑。
+  编写业务逻辑后，参考人机协助流程:
+    HUMAN_MACHINE_COLLAB.md
 ```
 
 ---
 
-## 附录 A：提权说明
+## 附录 A：架构关键变更（P0/P1）
+
+### ✅ P0 — 崩溃快照（Crash Snapshot）
+
+当 `SystemException` 触发时，自动在 `crash_snapshots/` 目录生成 `crash_{RunID}.json` 文件。该文件包含完整的错误上下文，供 AI 自愈层读取。
+
+**输出格式**（AI 直接读取）：
+- error_type, message — 错误摘要
+- traceback — 完整堆栈
+- action / expected / actual — 业务上下文（触发动作、预期、实际）
+- payload — 入参数据
+- file / function / line — 代码定位
+- project — 所属项目
+
+### ✅ P0 — pending_fix 状态机
+
+- 系统异常 + 成功创建 Linear 工单 → `status: "pending_fix"`
+- 系统异常 + 工单创建失败（如测试环境无 API Key）→ `status: "failed"`
+- 目的是让影刀能区分"需要等待修复"和"彻底失败"
+
+### ✅ P1 — 文件锁（FileLock）
+
+- 同一项目路径一次只能运行一个实例
+- 第二个实例立即返回 `status: "locked"`，不需要等待
+- 防止并发触发 Git 冲突
+
+### ✅ P1 — Pytest 骨架
+
+- `pytest.ini` 已配置，测试放在 `tests/` 目录
+- 运行：`python -m pytest`
+
+---
+
+## 附录 B：提升说明
 
 如果在验证过程中（步骤 3）遇到权限错误：
 
@@ -182,7 +218,7 @@ chcp
 
 ---
 
-## 附录 B：手动修复 run.bat
+## 附录 C：手动修复 run.bat
 
 如果 run.bat 内容有误，手动修复模板：
 
@@ -207,3 +243,14 @@ with open(r'D:\CraftPJ\{项目名}\run.bat', 'w', encoding='utf-8') as f:
 > - `%~dp0` 以 `\` 结尾，传参给 `--repo_path` 时用 `%REPO_PATH:~0,-1%` 去掉末尾 `\`（避免 `\"` 被 Windows 命令解析器当成转义）
 > - 文件必须 UTF-8 编码（系统代码页 65001），不要用 GBK
 > - 不要包含 `chcp 65001`
+
+---
+
+## 附录 D：从模板中删除的旧功能
+
+以下功能已从核心流程中移除/简化：
+
+| 功能 | 移除原因 | 替代方案 |
+|------|----------|----------|
+| `_force_crash` 测试标记 | 改用 `id=0` 触发 SystemException | `tasks=[{"id": 0, "name": "crash test"}]` |
+| 独立 `diag.py` | P0 异常路由已覆盖诊断需求 | 查看 `crash_snapshots/` 下的快照 |
