@@ -1,4 +1,10 @@
 {
     "project": "开发模板",
-    "is_test_to_git_env": false
+    "is_test_to_git_env": false,
+    "ai": {
+        "enabled": false,
+        "model": "glm-4-7-251222",
+        "timeout": 30
+    },
+    "version": "1.1.0"
 }

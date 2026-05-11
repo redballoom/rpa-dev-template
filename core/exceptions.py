@@ -1,7 +1,7 @@
 """
-core/exceptions.py - Exception router with crash snapshot support
+core/exceptions.py - Exception router with crash snapshot + AI analysis support
 L1: BusinessException -> collect, Feishu summary
-L2: SystemException -> Linear issue + crash snapshot
+L2: SystemException -> dump snapshot + AI root cause analysis + Linear issue
 """
 
 import traceback, os, re, json
@@ -75,23 +75,57 @@ class SystemException(Exception):
         path = os.path.join(snap_dir, "crash_%s.json" % run_id)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(snapshot, f, ensure_ascii=False, indent=2)
-        print("[exceptions] Snapshot:", path)
+        print("[exceptions] Snapshot: %s" % path)
         return path
 
     def notify(self, extra_payload: Optional[dict] = None, repo_path: str = ".") -> dict:
         merged = {**self.payload}
-        if extra_payload: merged.update(extra_payload)
+        if extra_payload:
+            merged.update(extra_payload)
         run_id = extra_payload.get("run_id", "unknown") if extra_payload else "unknown"
+
+        # 1. Dump crash snapshot
         self._dump_snapshot(run_id=run_id, repo_path=repo_path)
-        ir = create_linear_issue(error_msg=str(self), trace=self.traceback_str,
+
+        # 2. AI root cause analysis (optional, graceful fallback)
+        ai_result = None
+        try:
+            from core.ai_analyzer import analyze_crash
+            snapshot_data = {
+                "error_type": self.error_type, "message": str(self),
+                "action": self.action, "expected": self.expected, "actual": self.actual,
+                "traceback": self.traceback_str,
+                "file": self.error_file, "function": self.error_function,
+                "line": self.error_line, "code": self.error_code,
+                "payload": merged, "project": self.project,
+            }
+            ai_result = analyze_crash(snapshot_data)
+        except ImportError:
+            print("[exceptions] ai_analyzer module not available, skipping AI analysis")
+        except Exception as e:
+            print("[exceptions] AI analysis error (non-blocking): %s" % e)
+
+        # 3. Create Linear issue (with AI enrichment if available)
+        ir = create_linear_issue(
+            error_msg=str(self), trace=self.traceback_str,
             payload_data=merged if merged else {}, project=self.project, repo_path=repo_path,
             error_type=self.error_type, error_file=self.error_file,
             error_function=self.error_function, error_line=self.error_line,
-            error_code=self.error_code, action=self.action, expected=self.expected, actual=self.actual)
+            error_code=self.error_code, action=self.action, expected=self.expected, actual=self.actual,
+            ai_analysis=ai_result,
+        )
+
         if isinstance(ir, dict):
-            return {"category": "system", "message": str(self), "project": self.project,
-                    "error_type": self.error_type, "error_file": self.error_file,
-                    "issue_success": ir.get("success", False), "issue_url": ir.get("issue_url", "")}
-        return {"category": "system", "message": str(self), "project": self.project,
+            return {
+                "category": "system", "message": str(self), "project": self.project,
                 "error_type": self.error_type, "error_file": self.error_file,
-                "issue_success": bool(ir), "issue_url": ""}
+                "issue_success": ir.get("success", False),
+                "issue_url": ir.get("issue_url", ""),
+                "ai_analysis": ai_result,
+            }
+        return {
+            "category": "system", "message": str(self), "project": self.project,
+            "error_type": self.error_type, "error_file": self.error_file,
+            "issue_success": bool(ir), "issue_url": "",
+            "ai_analysis": ai_result,
+        }

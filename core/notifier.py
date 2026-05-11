@@ -1,4 +1,4 @@
-"""core/notifier.py — 告警通知（飞书 + Linear 双通道）"""
+"""core/notifier.py — 告警通知（飞书 + Linear 双通道 + AI 分析增强）"""
 import requests
 import json
 import traceback
@@ -37,49 +37,31 @@ def send_execution_summary(
 ) -> bool:
     """
     飞书执行汇总通知（一次说完，不再逐个轰炸）。
-
-    三种场景：
-    1. 全部成功 → 不发送（静默）
-    2. 有警告无异常 → 📊 黄色卡片
-    3. 有系统异常   → 🔴 红色卡片
-
-    Args:
-        project:       项目名称
-        run_id:        本次运行 ID
-        total:         任务总数
-        success_count: 成功数
-        warnings:      BusinessException 收集列表，每项 {task, message, context}
-        errors:        SystemException 收集列表，每项 {task, message, error_type, issue_url}
     """
-    # 全部成功 → 静默
     if not warnings and not errors:
-        print(f"[notifier] 全部成功 ({success_count}/{total})，跳过飞书通知")
+        print("[notifier] 全部成功 (%d/%d)，跳过飞书通知" % (success_count, total))
         return True
 
     warn_count = len(warnings)
     err_count = len(errors)
     has_error = err_count > 0
 
-    # ── 标题 ──
     title = (
-        f"🔴 [{project}] 执行中断 {run_id}"
+        "🔴 [%s] 执行中断 %s" % (project, run_id)
         if has_error
-        else f"📊 [{project}] 执行报告 {run_id}"
+        else "📊 [%s] 执行报告 %s" % (project, run_id)
     )
     template = "red" if has_error else "yellow"
 
-    # ── 统计行 ──
-    stat_parts = [f"✅ 成功 {success_count}/{total}"]
+    stat_parts = ["✅ 成功 %d/%d" % (success_count, total)]
     if warn_count:
-        stat_parts.append(f"⚠️ 跳过 {warn_count}")
+        stat_parts.append("⚠️ 跳过 %d" % warn_count)
     if err_count:
-        stat_parts.append(f"🔴 异常 {err_count}")
+        stat_parts.append("🔴 异常 %d" % err_count)
     stat_line = "  ".join(stat_parts)
 
-    # ── 构建内容块 ──
     elements = [{"tag": "markdown", "content": stat_line}]
 
-    # 异常明细
     if errors:
         err_lines = []
         for err in errors:
@@ -87,22 +69,21 @@ def send_execution_summary(
             msg = err.get("message", "未知错误")[:80]
             error_type = err.get("error_type", "")
             issue_url = err.get("issue_url", "")
-            line = f"**· 任务[{task_name}]** → {error_type}: {msg}"
+            line = "**· 任务[%s]** → %s: %s" % (task_name, error_type, msg)
             if issue_url:
-                line += f"\n  → [查看工单]({issue_url})"
+                line += "\n  → [查看工单](%s)" % issue_url
             err_lines.append(line)
         elements.append({
             "tag": "markdown",
             "content": "**🔴 异常明细**\n" + "\n".join(err_lines),
         })
 
-    # 警告明细
     if warnings:
         warn_lines = []
         for w in warnings:
             task_name = w.get("task", {}).get("name", "未知任务")
             msg = w.get("message", "")[:80]
-            warn_lines.append(f"**· 任务[{task_name}]** → {msg}")
+            warn_lines.append("**· 任务[%s]** → %s" % (task_name, msg))
         elements.append({
             "tag": "markdown",
             "content": "**⚠️ 跳过明细**\n" + "\n".join(warn_lines),
@@ -121,39 +102,14 @@ def send_execution_summary(
     return _feishu_post(content)
 
 
-# ── 飞书：单条业务异常通知（保留，供独立调用）────────────────
-
-def send_business_alert(project: str, message: str, context: Optional[Dict[str, Any]] = None) -> bool:
-    """
-    飞书单条业务异常提醒（黄牌）。
-    注意：批量模式下不使用此函数，由 send_execution_summary 汇总发送。
-    此函数仅用于需要独立发送单条通知的特殊场景。
-    """
-    content = {
-        "msg_type": "interactive",
-        "card": {
-            "header": {
-                "title": {"tag": "plain_text", "content": f"[{project}] 业务异常提醒"},
-                "template": "yellow",
-            },
-            "elements": [{"tag": "markdown", "content": f"**异常信息**\n{message}"}],
-        },
-    }
-    if context:
-        ctx = "\n".join([f"**{k}**: {v}" for k, v in context.items()])
-        content["card"]["elements"].append({"tag": "markdown", "content": f"**上下文**\n{ctx}"})
-    return _feishu_post(content)
-
-
 # ── 工具函数 ────────────────────────────────────────────────
 
 def _get_current_branch(repo_path: str = ".") -> str:
-    """获取当前 Git 分支名称，读失败时返回 'unknown'"""
     try:
         import subprocess
         res = subprocess.run(
             ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=5,
         )
         return res.stdout.strip()
     except Exception:
@@ -161,12 +117,11 @@ def _get_current_branch(repo_path: str = ".") -> str:
 
 
 def _get_current_commit(repo_path: str = ".") -> str:
-    """获取当前 Git 短 commit hash，读失败时返回 'unknown'"""
     try:
         import subprocess
         res = subprocess.run(
             ["git", "-C", repo_path, "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=5,
         )
         return res.stdout.strip()
     except Exception:
@@ -174,15 +129,10 @@ def _get_current_commit(repo_path: str = ".") -> str:
 
 
 def _is_production_env(repo_path: str = ".") -> bool:
-    """
-    检查当前 Git 分支是否为生产环境（main）。
-    测试环境（fix/bug-test）不创建工单，避免污染 Linear。
-    """
     return _get_current_branch(repo_path) == "main"
 
 
 def _linear_request(query: str, variables: dict = None) -> Optional[dict]:
-    """Linear GraphQL 请求封装，返回 data 层或 None"""
     try:
         payload = {"query": query}
         if variables:
@@ -198,38 +148,24 @@ def _linear_request(query: str, variables: dict = None) -> Optional[dict]:
         )
         result = response.json()
         if "errors" in result:
-            print(f"[notifier] ❌ GraphQL 错误: {result['errors']}")
+            print("[notifier] ❌ GraphQL 错误: %s" % result["errors"])
             return None
         return result.get("data")
     except Exception as e:
-        print(f"[notifier] ❌ Linear 请求异常: {e}")
+        print("[notifier] ❌ Linear 请求异常: %s" % e)
         return None
 
 
 # ── Linear 项目管理 ──────────────────────────────────────────
 
 def _ensure_linear_project() -> Optional[str]:
-    """
-    确保 Linear Project 存在，返回 project_id。
-
-    逻辑：
-    1. 如果 config 中已配置 LINEAR_PROJECT_ID，直接使用
-    2. 否则按 LINEAR_PROJECT_NAME 查询
-    3. 查不到则自动创建
-    """
-    # 1. 优先使用已知的 project_id
     if LINEAR_PROJECT_ID:
         return LINEAR_PROJECT_ID
 
-    # 2. 按名称查找
     query = """
     query FindProject($name: String!) {
       projects(filter: {name: {eq: $name}}) {
-        nodes {
-          id
-          name
-          state
-        }
+        nodes { id name state }
       }
     }
     """
@@ -237,35 +173,29 @@ def _ensure_linear_project() -> Optional[str]:
     if data:
         nodes = data.get("projects", {}).get("nodes", [])
         if nodes:
-            project_id = nodes[0]["id"]
-            print(f"[notifier] 📂 已找到 Linear 项目: {nodes[0]['name']} ({project_id})")
-            return project_id
+            print("[notifier] 📂 已找到 Linear 项目: %s (%s)" % (nodes[0]["name"], nodes[0]["id"]))
+            return nodes[0]["id"]
 
-    # 3. 项目不存在，自动创建
-    print(f"[notifier] 📂 项目 [{LINEAR_PROJECT_NAME}] 不存在，自动创建...")
+    print("[notifier] 📂 项目 [%s] 不存在，自动创建..." % LINEAR_PROJECT_NAME)
     mutation = """
     mutation CreateProject($name: String!, $teamIds: [String!]!) {
       projectCreate(input: {name: $name, teamIds: $teamIds}) {
         success
-        project {
-          id
-          name
-        }
+        project { id name }
       }
     }
     """
     data = _linear_request(mutation, {"name": LINEAR_PROJECT_NAME, "teamIds": [LINEAR_TEAM_ID]})
     if data and data.get("projectCreate", {}).get("success"):
         project = data["projectCreate"]["project"]
-        project_id = project["id"]
-        print(f"[notifier] 📂 ✅ 项目创建成功: {project['name']} ({project_id})")
-        return project_id
+        print("[notifier] 📂 ✅ 项目创建成功: %s (%s)" % (project["name"], project["id"]))
+        return project["id"]
 
     print("[notifier] ❌ Linear 项目查找/创建失败，工单将不关联项目")
     return None
 
 
-# ── Linear：系统 Bug 工单（L2）───────────────────────────────
+# ── Linear：系统 Bug 工单（L2 + AI 增强）────────────────────
 
 def create_linear_issue(
     error_msg: str,
@@ -281,52 +211,36 @@ def create_linear_issue(
     action: str = "",
     expected: str = "",
     actual: str = "",
-) -> bool:
+    ai_analysis: Optional[dict] = None,
+) -> Any:
     """
-    将 Python 系统 Bug 推送为 Linear 工单，并关联到对应项目。
-
-    流程：
-    1. 检查分支（测试环境跳过）
-    2. 检查/创建 Linear Project
-    3. 创建 Issue 并关联 Project
+    创建 Linear 工单，支持 AI 分析增强。
 
     Args:
-        error_msg:      报错信息摘要
-        trace:          traceback 堆栈
-        payload_data:   触发时的入参载荷
-        project:        项目名称
-        repo_path:      仓库路径
-        error_type:     异常类型
-        error_file:     出错文件
-        error_function: 出错函数名
-        error_line:     出错行号
-        error_code:     出错代码行
-        action:         触发动作：正在做什么时出错
-        expected:       预期结果：系统本来应该怎样
-        actual:         实际结果：这次失败造成了什么
-
-    Returns:
-        dict: {"success": bool, "issue_url": str}
+        ai_analysis: Optional dict from ai_analyzer.analyze_crash().
+                     If present, enriches title + description with AI insights.
     """
     # 测试分支不创建工单
     if repo_path and not _is_production_env(repo_path):
         branch = _get_current_branch(repo_path)
-        print(f"[notifier] INFO: branch [{branch}] is test env, skip Linear issue")
+        print("[notifier] INFO: branch [%s] is test env, skip Linear issue" % branch)
         return {"success": True, "issue_url": ""}
 
     project_id = _ensure_linear_project()
 
     # ── 工单标题 ─────────────────────────────────────────────
-    # 优先级：action > error_type + file > error_msg
-    if action and error_type:
-        title = f"[Bug] {action} 失败 - {error_type}"
+    # AI analysis overrides default title generation
+    if ai_analysis and ai_analysis.get("summary"):
+        title = "[Bug] %s" % ai_analysis["summary"]
+    elif action and error_type:
+        title = "[Bug] %s 失败 - %s" % (action, error_type)
     elif error_type and error_file:
         short_file = error_file.replace("\\", "/")
-        title = f"[Bug] {error_type} in {short_file}:{error_function}()"
+        title = "[Bug] %s in %s:%s()" % (error_type, short_file, error_function)
     elif error_type:
-        title = f"[Bug] {error_type}: {error_msg.split(chr(10))[0][:60]}"
+        title = "[Bug] %s: %s" % (error_type, error_msg.split(chr(10))[0][:60])
     else:
-        title = f"[Bug] {error_msg.split(':')[0][:60]}"
+        title = "[Bug] %s" % error_msg.split(":")[0][:60]
 
     # ── 工单描述 ─────────────────────────────────────────────
     branch = _get_current_branch(repo_path)
@@ -334,70 +248,78 @@ def create_linear_issue(
 
     parts = []
 
-    # 1. 业务上下文（最重要的定位信息，放在最前面）
+    # 1. 业务上下文
     if action or expected or actual:
         parts.append("## 业务上下文")
         ctx_lines = ["| 项目 | 内容 |", "|------|------|"]
         if action:
-            ctx_lines.append(f"| **触发动作** | {action} |")
+            ctx_lines.append("| **触发动作** | %s |" % action)
         if expected:
-            ctx_lines.append(f"| **预期结果** | {expected} |")
+            ctx_lines.append("| **预期结果** | %s |" % expected)
         if actual:
-            ctx_lines.append(f"| **实际结果** | {actual} |")
+            ctx_lines.append("| **实际结果** | %s |" % actual)
         parts.append("\n".join(ctx_lines))
 
     # 2. 错误摘要
     parts.append("\n## 错误摘要")
     summary_lines = ["| 项目 | 值 |", "|------|------|"]
-    summary_lines.append(f"| 异常类型 | `{error_type or 'Unknown'}` |")
-    summary_lines.append(f"| 出错文件 | `{error_file or 'Unknown'}` |")
-    summary_lines.append(f"| 出错函数 | `{error_function or 'Unknown'}` |")
+    summary_lines.append("| 异常类型 | `%s` |" % (error_type or "Unknown"))
+    summary_lines.append("| 出错文件 | `%s` |" % (error_file or "Unknown"))
+    summary_lines.append("| 出错函数 | `%s` |" % (error_function or "Unknown"))
     if error_line:
-        summary_lines.append(f"| 行号 | L{error_line} |")
-    summary_lines.append(f"| 所属项目 | {project} |")
-    summary_lines.append(f"| 环境 | `{branch}@{commit}` |")
+        summary_lines.append("| 行号 | L%s |" % error_line)
+    summary_lines.append("| 所属项目 | %s |" % project)
+    summary_lines.append("| 环境 | `%s@%s` |" % (branch, commit))
     parts.append("\n".join(summary_lines))
 
     # 3. 出错代码
     if error_code:
-        parts.append(
-            f"\n## 出错代码\n```python\n# {error_file} L{error_line}\n{error_code}\n```"
-        )
+        parts.append("\n## 出错代码\n```python\n# %s L%s\n%s\n```" % (error_file, error_line, error_code))
 
-    # 4. 报错信息
-    parts.append(f"\n## 报错信息\n```\n{error_msg}\n```")
+    # 4. AI 分析（核心增强）
+    if ai_analysis:
+        ai_lines = ["## 🤖 AI 根因分析"]
+        ai_lines.append("\n### 严重度")
+        ai_lines.append("| 维度 | 评估 |")
+        ai_lines.append("|------|------|")
+        ai_lines.append("| 严重级别 | `%s` |" % ai_analysis.get("severity", "unknown"))
+        ai_lines.append("| 优先级 | `%s` |" % ai_analysis.get("priority", "unknown"))
+        ai_lines.append("| 异常类别 | `%s` |" % ai_analysis.get("category", "unknown"))
+        ai_lines.append("\n### 根因分析")
+        ai_lines.append(ai_analysis.get("root_cause", "N/A"))
+        ai_lines.append("\n### 修复建议")
+        ai_lines.append("```python")
+        ai_lines.append(ai_analysis.get("suggested_fix", "N/A"))
+        ai_lines.append("```")
+        parts.append("\n".join(ai_lines))
 
-    # 5. 堆栈追踪（折叠）
+    # 5. 报错信息
+    parts.append("\n## 报错信息\n```\n%s\n```" % error_msg)
+
+    # 6. 堆栈追踪
     parts.append(
-        "\n## 堆栈追踪\n<details>\n\n```python\n{}\n```\n\n</details>".format(
+        "\n## 堆栈追踪\n<details>\n\n```python\n%s\n```\n\n</details>" % (
             trace or "无堆栈信息（手动 raise 的异常，无真实栈帧）"
         )
     )
 
-    # 6. 输入参数
+    # 7. 输入参数
     if payload_data:
         parts.append(
-            "\n## 输入参数\n```json\n{}\n```".format(
-                json.dumps(payload_data, ensure_ascii=False, indent=2)
-            )
+            "\n## 输入参数\n```json\n%s\n```" % json.dumps(payload_data, ensure_ascii=False, indent=2)
         )
 
     description = "\n".join(parts)
 
-    # 创建 Issue 并关联 Project
+    # ── 创建 Issue ──────────────────────────────────────────
     mutation = """
     mutation IssueCreate($title: String!, $description: String!, $teamId: String!, $projectId: String) {
       issueCreate(input: {title: $title, description: $description, teamId: $teamId, projectId: $projectId}) {
         success
-        issue {
-          id
-          title
-          url
-        }
+        issue { id title url }
       }
     }
     """
-
     variables = {
         "title": title,
         "description": description,
@@ -416,18 +338,15 @@ def create_linear_issue(
             timeout=15,
         )
         result = response.json()
-
         if result.get("data", {}).get("issueCreate", {}).get("success"):
             issue_url = result["data"]["issueCreate"]["issue"]["url"]
-            proj_info = f" (项目: {LINEAR_PROJECT_NAME})" if project_id else ""
-            print(f"[notifier] ✅ Linear 工单创建成功{proj_info}: {issue_url}")
+            print("[notifier] ✅ Linear 工单创建成功: %s" % issue_url)
             return {"success": True, "issue_url": issue_url}
         else:
-            print(f"[notifier] ❌ Linear 工单创建失败: {result}")
+            print("[notifier] ❌ Linear 工单创建失败: %s" % result)
             return {"success": False, "issue_url": ""}
-
     except Exception as e:
-        print(f"[notifier] ❌ Linear 请求异常: {e}")
+        print("[notifier] ❌ Linear 请求异常: %s" % e)
         return {"success": False, "issue_url": ""}
 
 
@@ -438,10 +357,10 @@ def _feishu_post(data: dict) -> bool:
         r = requests.post(FEISHU_WEBHOOK, json=data, timeout=10)
         result = r.json()
         if result.get("code") != 0:
-            print(f"[notifier] 飞书发送失败: {result.get('msg', '')}")
+            print("[notifier] 飞书发送失败: %s" % result.get("msg", ""))
             return False
         print("[notifier] ✅ 飞书通知已发送")
         return True
     except Exception as e:
-        print(f"[notifier] 飞书请求异常: {e}")
+        print("[notifier] 飞书请求异常: %s" % e)
         return False

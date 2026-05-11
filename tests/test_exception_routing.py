@@ -58,14 +58,14 @@ def test_business_exception():
     # 有1条警告
     warnings = result["data"]["warnings"]
     assert len(warnings) == 1
-    assert "ID无效" in warnings[0]["message"]
+    assert "Invalid ID" in warnings[0]["message"]
     print("  [PASS]\n")
 
 
 def test_system_exception():
     """系统异常 → failed，中断后续任务，创建 Linear 工单"""
     print("=" * 60)
-    print("[测试 3] 系统异常（中断 + Linear 工单 + 飞书红色卡片）")
+    print("[测试 3] 系统异常（中断 + AI 分析 + Linear 工单 + 飞书红色卡片）")
     result = run_tasks(
         run_id="test-003",
         project="开发模板测试",
@@ -77,7 +77,7 @@ def test_system_exception():
     )
     print(f"  status: {result['status']}")
     print(f"  message: {result['message']}")
-    assert result["status"] == "failed"
+    assert result["status"] == "pending_fix"
     data = result.get("data", {})
     results = data.get("results", [])
     # SystemException 中断，只执行了第1个（正常）+ 第2个（异常）
@@ -93,7 +93,7 @@ def test_system_exception():
 def test_mixed():
     """混合场景：业务异常 + 系统异常"""
     print("=" * 60)
-    print("[测试 4] 混合场景（业务跳过 + 系统中断）")
+    print("[测试 4] 混合场景（业务跳过 + 系统中断 + AI 分析）")
     result = run_tasks(
         run_id="test-004",
         project="开发模板测试",
@@ -106,7 +106,7 @@ def test_mixed():
     )
     print(f"  status: {result['status']}")
     print(f"  message: {result['message']}")
-    assert result["status"] == "failed"
+    assert result["status"] == "pending_fix"
     data = result["data"]
     # 执行了3个：正常 + 跳过 + 异常
     results = data["results"]

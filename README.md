@@ -12,8 +12,9 @@ RPA 项目开发模板，基于 Gemini 高阶 RPA 自愈自动化架构。
 ├── core/
 │   ├── __init__.py
 │   ├── entry.py          # 业务执行入口
-│   ├── exceptions.py     # 异常路由分流器（L1 飞书 / L2 Linear）
+│   ├── exceptions.py     # 异常路由分流器（L1 飞书 / L2 Linear + AI 分析）
 │   ├── notifier.py       # 告警网关（飞书 L1 + Linear，含分支感知）
+│   ├── ai_analyzer.py    # AI 崩溃分析（Volcengine Ark API）
 │   └── config.py         # 敏感配置集中管理
 ├── commands/             # 可插拔业务命令模块（规划中）
 ├── tests/

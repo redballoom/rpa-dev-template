@@ -174,6 +174,16 @@ Git 仓库: 已初始化 (首次 commit 完成)
 - file / function / line — 代码定位
 - project — 所属项目
 
+### ✅ P0 — AI 崩溃分析（AI Crash Analysis）
+
+当 `SystemException` 触发时，`_dump_snapshot()` 后自动调用 `core/ai_analyzer.analyze_crash()`：
+
+- 调用 **Volcengine Ark API**（`chat/completions` 端点）
+- 模型：`glm-4-7-251222`（可配置）
+- 返回结构化分析：root_cause、suggested_fix、severity、category、priority、summary
+- AI 结果嵌入 Linear 工单标题 + 描述
+- 降级安全：API Key 缺失 / 超时 / 异常 → 静默跳过，不影响现有流程
+
 ### ✅ P0 — pending_fix 状态机
 
 - 系统异常 + 成功创建 Linear 工单 → `status: "pending_fix"`

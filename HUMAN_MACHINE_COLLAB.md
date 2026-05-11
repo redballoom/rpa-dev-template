@@ -8,54 +8,65 @@
 ## 一、架构总览
 
 ### 角色矩阵
-
 ```mermaid
 graph TB
-    subgraph "影刀 RPA（前端编排）"
-        Y1["🎮 运行或打开 run.bat"]
-        Y2["📖 读取 runner_{RunID}.json"]
-        Y3["🔀 按 status 分支决策"]
-        Y4["📨 通知人类（飞书/邮件）"]
+    subgraph RPA[影刀 RPA 前端编排]
+        Y1[🎮 运行或打开 run.bat]
+        Y2[📖 读取 runner_RunID.json]
+        Y3[🔀 按 status 分支决策]
+        Y4[📨 通知人类 飞书或邮件]
     end
 
-    subgraph "Python 后端（核心引擎）"
-        P1["⚙️ runner.py 调度器"]
-        P2["📦 core/entry.py 业务执行"]
-        P3["🚨 core/exceptions.py 异常路由"]
-        P4["📢 core/notifier.py 通知通道"]
-        P5["🌿 git_controller.py 分支切换"]
+    subgraph PY[Python 后端 核心引擎]
+        P1[⚙️ runner.py 调度器]
+        P5[🌿 git_controller.py 分支切换]
+        P2[📦 core/entry.py 业务执行]
+        P3[🚨 core/exceptions.py 异常路由]
+        P4[📢 core/notifier.py 通知通道]
     end
 
-    subgraph "AI 自愈层（Craft Agent / Claude Code）"
-        A1["🔍 读取 crash_snapshot"]
-        A2["🐛 自动修复代码"]
-        A3["🔀 推送 fix/bug-test 分支"]
-        A4["📝 创建 PR 请求审查"]
+    subgraph AI[AI 自愈层 Craft Agent / Claude Code]
+        A1[🔍 读取 crash_snapshot]
+        A2[🐛 自动修复代码]
+        A3[🔀 推送 fix/bug-test 分支]
+        A4[📝 创建 PR 请求审查]
     end
 
-    subgraph "人类（审核决策层）"
-        H1["👁️ 代码审查 + Approve PR"]
-        H2["🔀 合并到 main 分支"]
-        H3["🔄 配置 is_test_to_git_env 开关"]
+    subgraph HUMAN[人类 审核决策层]
+        H1[👁️ 代码审查 + Approve PR]
+        H2[🔀 合并到 main 分支]
+        H3[🔄 配置 is_test_to_git_env 开关]
     end
 
-    Y1 -->|run.bat {RunID}| P1
-    P1 -->|tasks| P2
+    %% 正常执行流
+    Y1 -->|run.bat RunID| P1
+    P1 -->|触发调度| P5
+    P5 -->|tasks| P2
+    P2 -->|执行完毕写JSON| Y2
+    Y2 -->|读取状态| Y3
+
+    %% 异常路由流
     P2 -->|BusinessException| P3
     P2 -->|SystemException| P3
     P3 -->|L1 警告| P4
     P3 -->|L2 崩溃| P4
     P3 -->|dump snapshot| A1
+    
+    %% 通知流
     P4 -->|飞书汇总卡片| Y4
     Y4 -->|通知后触发| H1
+    
+    %% AI自愈流
     A1 -->|分析堆栈| A2
     A2 -->|提交 fix| A3
-    A3 -->|创建 PR| H1
+    A3 -->|推送远端| A4
+    A4 -->|创建 PR| H1
+    
+    %% 人工审核闭环
     H1 -->|Merge| H2
     H2 -->|回到 main| H3
     H3 -->|is_test=false| Y1
 ```
-
 ---
 
 ## 二、影刀 RPA — 职责清单
@@ -143,11 +154,12 @@ graph TD
 | `run.bat` | 系统入口，设置环境变量 | RunID | 调用 runner.py |
 | `runner.py` | 调度器：配置加载、文件锁、Git 切换、业务入口 | RunID + repo_path | `runner_{RunID}.json` |
 | `core/entry.py` | 业务执行引擎：任务循环 + 异常捕获 | tasks 列表 | 执行结果汇总 |
-| `core/exceptions.py` | 异常路由：Business=L1/System=L2+快照 | 异常实例 | 通知/快照 |
+| `core/exceptions.py` | 异常路由：L1/L2+快照+AI分析 | 异常实例 | 通知/快照/AI分析 |
 | `core/notifier.py` | 通知通道：飞书（L1）+ Linear（L2） | 错误信息 | 飞书卡片/Linear 工单 |
-| `core/config.py` | 全局配置（API Key 等） | project.json | 配置对象 |
+| `core/config.py` | 全局配置（含 AI 分析） | project.json | 配置对象 |
 | `git_controller.py` | Git 分支切换 | is_test 标记 | 分支切换结果 |
 | `core/__init__.py` | 模块导出 | — | 统一导入接口 |
+| `core/ai_analyzer.py` | AI 崩溃分析（Volcengine Ark） | crash snapshot | AI 根因/修复/分类 |
 
 ### 3.2 执行流程
 
@@ -157,6 +169,7 @@ sequenceDiagram
     participant Runner as runner.py
     participant Entry as core/entry.py
     participant Exc as core/exceptions.py
+    participant AI as core/ai_analyzer.py
     participant Notif as core/notifier.py
     participant GitC as git_controller.py
 
@@ -177,7 +190,9 @@ sequenceDiagram
             else SystemException
                 Entry->>Exc: SystemException.notify()
                 Exc->>Exc: _dump_snapshot() → crash_snapshots/
-                Exc->>Notif: create_linear_issue()
+                Exc->>AI: analyze_crash(snapshot)
+                AI-->>Exc: ai_analysis
+                Exc->>Notif: create_linear_issue(ai_analysis=)
                 Notif-->>Exc: issue_url
                 Entry-->>Entry: break (stop on first fatal)
             end
@@ -199,15 +214,15 @@ sequenceDiagram
           BusinessException         SystemException
                (L1)                     (L2)
                     │                     │
-            ┌───────┴───────┐     ┌───────┴────────┐
-            │               │     │                │
-      收集到 warnings  任务继续   _dump_snapshot()  create_linear_issue()
-            │               │     │                │
-       飞书汇总卡片           │   crash_xxx.json   Linear 工单
-            │               │     │                │
-       send_execution_      │    AI 自愈输入      status="pending_fix"
-       summary() — ALL      │                     │
-       异常一起发            │             影刀标记"待修复"
+            ┌───────┴───────┐     ┌───────┴──────────────┐
+            │               │     │                      │
+      收集到 warnings  任务继续   _dump_snapshot()     analyze_crash()
+            │               │     │                      │
+       飞书汇总卡片           │   crash_xxx.json    AI 根因/修复/分类
+            │               │     │                      │
+       send_execution_      │     └────→ create_linear_issue(ai_analysis=)
+       summary() — ALL      │                    │
+       异常一起发            │             Linear 工单（AI 增强）
 ```
 
 ### 3.4 配置合并策略
@@ -319,8 +334,18 @@ graph TD
   "project": "项目名称",
   "is_test_to_git_env": false,
   "feishu_webhook": "https://open.feishu.cn/...",
-  "linear_api_key": "lin_api_xxx",
-  "linear_team_id": "team_xxx"
+  "linear": {
+    "api_key": "lin_api_xxx",
+    "team_id": "team_xxx",
+    "project_name": "项目名",
+    "project_id": ""
+  },
+  "ai": {
+    "enabled": true,
+    "api_key": "",
+    "model": "glm-4-7-251222",
+    "timeout": 30
+  }
 }
 ```
 
