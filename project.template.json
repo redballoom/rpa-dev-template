@@ -1,10 +1,18 @@
 {
     "project": "开发模板",
-    "is_test_to_git_env": false,
+    "version": "2.0.0",
+    "feishu_webhook": "",
+    "linear": {
+        "api_key": "",
+        "team_id": "",
+        "project_name": "",
+        "project_id": "",
+        "assignee_id": ""
+    },
     "ai": {
         "enabled": false,
+        "api_key": "",
         "model": "glm-4-7-251222",
         "timeout": 30
-    },
-    "version": "1.1.0"
+    }
 }

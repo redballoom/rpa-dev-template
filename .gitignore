@@ -40,5 +40,6 @@ Thumbs.db
 # *.egg-info/
 
 crash_snapshots/
+logs/
 
 .runner.lock

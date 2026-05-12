@@ -1,4 +1,28 @@
-"""core/notifier.py — 告警通知（飞书 + Linear 双通道 + AI 分析增强）"""
+"""
+core/notifier.py — 告警通知模块
+================================
+
+职责分层（单文件，按区段组织）：
+
+  §1 飞书通知 ─────────────────────────────────
+     - send_execution_summary()  执行汇总卡片
+     - _feishu_post()            HTTP POST 封装
+
+  §2 Linear API 底层 ──────────────────────────
+     - _linear_request()         GraphQL 请求封装
+
+  §3 Linear 资源管理 ──────────────────────────
+     - _ensure_linear_project()  自动查找/创建项目
+     - _ensure_linear_label()    自动查找/创建标签
+     - _ensure_linear_assignee() 解析指派人
+
+  §4 Linear 工单创建 ──────────────────────────
+     - create_linear_issue()     L2 系统 Bug 工单（含 AI 增强）
+
+  §5 辅助工具 ─────────────────────────────────
+     - _get_current_branch() / _get_current_commit()
+     - _is_production_env()
+"""
 import requests
 import json
 import traceback
@@ -20,11 +44,12 @@ from core.config import (
     LINEAR_GRAPHQL_URL,
     LINEAR_PROJECT_NAME,
     LINEAR_PROJECT_ID,
+    LINEAR_ASSIGNEE_ID,
 )
 
 
 # ════════════════════════════════════════════════════════════════
-#  飞书通知：批量汇总模式（L1 警告 + L2 异常 合并发送）
+#  §1 飞书通知：批量汇总模式
 # ════════════════════════════════════════════════════════════════
 
 def send_execution_summary(
@@ -35,9 +60,7 @@ def send_execution_summary(
     warnings: List[Dict[str, Any]],
     errors: List[Dict[str, Any]],
 ) -> bool:
-    """
-    飞书执行汇总通知（一次说完，不再逐个轰炸）。
-    """
+    """飞书执行汇总通知（一次说完，不再逐个轰炸）"""
     if not warnings and not errors:
         print("[notifier] 全部成功 (%d/%d)，跳过飞书通知" % (success_count, total))
         return True
@@ -67,11 +90,21 @@ def send_execution_summary(
         for err in errors:
             task_name = err.get("task", {}).get("name", "未知任务")
             msg = err.get("message", "未知错误")[:80]
-            error_type = err.get("error_type", "")
+            exc_cat = err.get("exc_category", err.get("error_type", ""))
             issue_url = err.get("issue_url", "")
-            line = "**· 任务[%s]** → %s: %s" % (task_name, error_type, msg)
+            code = err.get("code", "")
+            # AI 增强字段
+            confidence = err.get("confidence", "")
+            need_review = err.get("need_human_review", False)
+            line = "**· 任务[%s]** → [%s] %s" % (task_name, exc_cat, msg)
+            if code:
+                line = "**· 任务[%s]** → [%s/%s] %s" % (task_name, exc_cat, code, msg)
             if issue_url:
                 line += "\n  → [查看工单](%s)" % issue_url
+            if need_review:
+                line += "\n  ⚠️ 需人工复核"
+            if confidence:
+                line += " (置信度: %.0f%%)" % (confidence * 100) if isinstance(confidence, (int, float)) else ""
             err_lines.append(line)
         elements.append({
             "tag": "markdown",
@@ -83,7 +116,11 @@ def send_execution_summary(
         for w in warnings:
             task_name = w.get("task", {}).get("name", "未知任务")
             msg = w.get("message", "")[:80]
-            warn_lines.append("**· 任务[%s]** → %s" % (task_name, msg))
+            code = w.get("code", "")
+            if code:
+                warn_lines.append("**· 任务[%s]** → [%s] %s" % (task_name, code, msg))
+            else:
+                warn_lines.append("**· 任务[%s]** → %s" % (task_name, msg))
         elements.append({
             "tag": "markdown",
             "content": "**⚠️ 跳过明细**\n" + "\n".join(warn_lines),
@@ -102,37 +139,27 @@ def send_execution_summary(
     return _feishu_post(content)
 
 
-# ── 工具函数 ────────────────────────────────────────────────
-
-def _get_current_branch(repo_path: str = ".") -> str:
+def _feishu_post(data: dict) -> bool:
+    """飞书 Webhook POST 封装"""
     try:
-        import subprocess
-        res = subprocess.run(
-            ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, check=True, timeout=5,
-        )
-        return res.stdout.strip()
-    except Exception:
-        return "unknown"
+        r = requests.post(FEISHU_WEBHOOK, json=data, timeout=10)
+        result = r.json()
+        if result.get("code") != 0:
+            print("[notifier] 飞书发送失败: %s" % result.get("msg", ""))
+            return False
+        print("[notifier] ✅ 飞书通知已发送")
+        return True
+    except Exception as e:
+        print("[notifier] 飞书请求异常: %s" % e)
+        return False
 
 
-def _get_current_commit(repo_path: str = ".") -> str:
-    try:
-        import subprocess
-        res = subprocess.run(
-            ["git", "-C", repo_path, "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, check=True, timeout=5,
-        )
-        return res.stdout.strip()
-    except Exception:
-        return "unknown"
-
-
-def _is_production_env(repo_path: str = ".") -> bool:
-    return _get_current_branch(repo_path) == "main"
-
+# ════════════════════════════════════════════════════════════════
+#  §2 Linear API 底层
+# ════════════════════════════════════════════════════════════════
 
 def _linear_request(query: str, variables: dict = None) -> Optional[dict]:
+    """Linear GraphQL 请求封装"""
     try:
         payload = {"query": query}
         if variables:
@@ -156,9 +183,14 @@ def _linear_request(query: str, variables: dict = None) -> Optional[dict]:
         return None
 
 
-# ── Linear 项目管理 ──────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+#  §3 Linear 资源管理（项目 / 标签 / 指派人）
+# ════════════════════════════════════════════════════════════════
+
+# ── 项目管理 ─────────────────────────────────────────────────
 
 def _ensure_linear_project() -> Optional[str]:
+    """确保 Linear 项目存在，返回 project_id"""
     if LINEAR_PROJECT_ID:
         return LINEAR_PROJECT_ID
 
@@ -195,7 +227,69 @@ def _ensure_linear_project() -> Optional[str]:
     return None
 
 
-# ── Linear：系统 Bug 工单（L2 + AI 增强）────────────────────
+# ── 标签管理 ──────────────────────────────────────────────────
+
+def _ensure_linear_label(name: str, team_id: str, color: str = "red") -> Optional[str]:
+    """确保标签存在，返回 label_id"""
+    query = """
+    query TeamLabels($teamId: String!) {
+      team(id: $teamId) { labels(first: 50) { nodes { id name } } }
+    }
+    """
+    data = _linear_request(query, {"teamId": team_id})
+    if data:
+        labels = data.get("team", {}).get("labels", {}).get("nodes", [])
+        for lbl in labels:
+            if lbl["name"].lower() == name.lower():
+                print("[notifier] 🏷️  标签已存在: %s (%s)" % (name, lbl["id"]))
+                return lbl["id"]
+
+    print("[notifier] 🏷️  自动创建标签: %s" % name)
+    mutation = """
+    mutation LabelCreate($name: String!, $teamId: String!, $color: String) {
+      issueLabelCreate(input: {name: $name, teamId: $teamId, color: $color}) {
+        success
+        issueLabel { id name }
+      }
+    }
+    """
+    data = _linear_request(mutation, {"name": name, "teamId": team_id, "color": color})
+    if data and data.get("issueLabelCreate", {}).get("success"):
+        label = data["issueLabelCreate"]["issueLabel"]
+        print("[notifier] 🏷️  ✅ 标签创建成功: %s (%s)" % (label["name"], label["id"]))
+        return label["id"]
+    return None
+
+
+# ── 指派人管理 ────────────────────────────────────────────────
+
+def _ensure_linear_assignee(assignee_id: str) -> Optional[str]:
+    """查找指派人 User ID（支持 UUID 或用户名）"""
+    import re
+    if re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-", assignee_id):
+        return assignee_id
+
+    query = """
+    query SearchUsers($filter: UserFilter) {
+      users(filter: $filter, first: 5) {
+        nodes { id name displayName email }
+      }
+    }
+    """
+    data = _linear_request(query, {"filter": {"name": {"contains": assignee_id}}})
+    if data:
+        users = data.get("users", {}).get("nodes", [])
+        if users:
+            uid = users[0]["id"]
+            print("[notifier] 👤 指派人已找到: %s (%s)" % (users[0].get("name", assignee_id), uid))
+            return uid
+    print("[notifier] ⚠️  指派人查找失败: %s" % assignee_id)
+    return None
+
+
+# ════════════════════════════════════════════════════════════════
+#  §4 Linear 工单创建（L2 系统 Bug + AI 增强）
+# ════════════════════════════════════════════════════════════════
 
 def create_linear_issue(
     error_msg: str,
@@ -213,13 +307,7 @@ def create_linear_issue(
     actual: str = "",
     ai_analysis: Optional[dict] = None,
 ) -> Any:
-    """
-    创建 Linear 工单，支持 AI 分析增强。
-
-    Args:
-        ai_analysis: Optional dict from ai_analyzer.analyze_crash().
-                     If present, enriches title + description with AI insights.
-    """
+    """创建 Linear 工单，支持 AI 分析增强 + 指派人 + 标签"""
     # 测试分支不创建工单
     if repo_path and not _is_production_env(repo_path):
         branch = _get_current_branch(repo_path)
@@ -229,7 +317,6 @@ def create_linear_issue(
     project_id = _ensure_linear_project()
 
     # ── 工单标题 ─────────────────────────────────────────────
-    # AI analysis overrides default title generation
     if ai_analysis and ai_analysis.get("summary"):
         title = "[Bug] %s" % ai_analysis["summary"]
     elif action and error_type:
@@ -276,7 +363,7 @@ def create_linear_issue(
     if error_code:
         parts.append("\n## 出错代码\n```python\n# %s L%s\n%s\n```" % (error_file, error_line, error_code))
 
-    # 4. AI 分析（核心增强）
+    # 4. AI 分析
     if ai_analysis:
         ai_lines = ["## 🤖 AI 根因分析"]
         ai_lines.append("\n### 严重度")
@@ -285,12 +372,23 @@ def create_linear_issue(
         ai_lines.append("| 严重级别 | `%s` |" % ai_analysis.get("severity", "unknown"))
         ai_lines.append("| 优先级 | `%s` |" % ai_analysis.get("priority", "unknown"))
         ai_lines.append("| 异常类别 | `%s` |" % ai_analysis.get("category", "unknown"))
+        # 新增 AI 增强字段
+        confidence = ai_analysis.get("confidence", "")
+        if confidence != "":
+            ai_lines.append("| 置信度 | `%s` |" % confidence)
+        if ai_analysis.get("need_human_review"):
+            ai_lines.append("| 需人工复核 | ✅ 是 |")
         ai_lines.append("\n### 根因分析")
         ai_lines.append(ai_analysis.get("root_cause", "N/A"))
         ai_lines.append("\n### 修复建议")
         ai_lines.append("```python")
         ai_lines.append(ai_analysis.get("suggested_fix", "N/A"))
         ai_lines.append("```")
+        # 测试建议
+        test_suggestion = ai_analysis.get("test_suggestion", "")
+        if test_suggestion:
+            ai_lines.append("\n### 测试建议")
+            ai_lines.append(test_suggestion)
         parts.append("\n".join(ai_lines))
 
     # 5. 报错信息
@@ -311,10 +409,25 @@ def create_linear_issue(
 
     description = "\n".join(parts)
 
+    # ── 解析指派人 ────────────────────────────────────────────
+    assignee_id = ""
+    if LINEAR_ASSIGNEE_ID:
+        resolved = _ensure_linear_assignee(LINEAR_ASSIGNEE_ID)
+        if resolved:
+            assignee_id = resolved
+
+    # ── 解析标签 ─────────────────────────────────────────────
+    label_ids = []
+    label_id = _ensure_linear_label("bug", LINEAR_TEAM_ID, color="red")
+    if label_id:
+        label_ids.append(label_id)
+
     # ── 创建 Issue ──────────────────────────────────────────
     mutation = """
-    mutation IssueCreate($title: String!, $description: String!, $teamId: String!, $projectId: String) {
-      issueCreate(input: {title: $title, description: $description, teamId: $teamId, projectId: $projectId}) {
+    mutation IssueCreate($title: String!, $description: String!, $teamId: String!,
+                         $projectId: String, $assigneeId: String, $labelIds: [String!]) {
+      issueCreate(input: {title: $title, description: $description, teamId: $teamId,
+                          projectId: $projectId, assigneeId: $assigneeId, labelIds: $labelIds}) {
         success
         issue { id title url }
       }
@@ -325,6 +438,8 @@ def create_linear_issue(
         "description": description,
         "teamId": LINEAR_TEAM_ID,
         "projectId": project_id,
+        "assigneeId": assignee_id or None,
+        "labelIds": label_ids if label_ids else None,
     }
 
     try:
@@ -350,17 +465,33 @@ def create_linear_issue(
         return {"success": False, "issue_url": ""}
 
 
-# ── 内部工具 ────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+#  §5 辅助工具
+# ════════════════════════════════════════════════════════════════
 
-def _feishu_post(data: dict) -> bool:
+def _get_current_branch(repo_path: str = ".") -> str:
     try:
-        r = requests.post(FEISHU_WEBHOOK, json=data, timeout=10)
-        result = r.json()
-        if result.get("code") != 0:
-            print("[notifier] 飞书发送失败: %s" % result.get("msg", ""))
-            return False
-        print("[notifier] ✅ 飞书通知已发送")
-        return True
-    except Exception as e:
-        print("[notifier] 飞书请求异常: %s" % e)
-        return False
+        import subprocess
+        res = subprocess.run(
+            ["git", "-C", repo_path, "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+        return res.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def _get_current_commit(repo_path: str = ".") -> str:
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["git", "-C", repo_path, "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5,
+        )
+        return res.stdout.strip()
+    except Exception:
+        return "unknown"
+
+
+def _is_production_env(repo_path: str = ".") -> bool:
+    return _get_current_branch(repo_path) == "main"

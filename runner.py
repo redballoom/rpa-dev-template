@@ -1,5 +1,12 @@
 """
-runner.py - Yingdao RPA CLI entry (BAT mode)
+runner.py — 影刀 RPA 调度入口
+==============================
+影刀通过 run.bat 调用此文件，传入 input_{run_id}.json。
+runner.py 读取输入 → 调用 core.entry.run_tasks() → 输出 runner_{run_id}.json。
+
+职责边界：
+  影刀：组织输入参数 → 调用 run.bat → 读取结果 JSON → 按 status 分支
+  Python：加载配置 → 读取输入 → 执行业务 → 异常分类 → 输出结果 → 写日志 → 通知
 """
 import sys, os, json, argparse, traceback
 
@@ -75,36 +82,41 @@ class _FileLock:
         self._acquired = False
 
 
-def _load_config(repo_path):
-    config = {}
-    for fn in ["project.template.json", "project.json"]:
-        fp = os.path.join(repo_path, fn)
-        if os.path.exists(fp):
-            try:
-                with open(fp, "r", encoding="utf-8") as f:
-                    config.update(json.load(f))
-            except Exception as e:
-                print("[runner] warning: %s: %s" % (fn, e))
-    return config
-
-
-def _switch_git(repo_path, config):
-    is_test = config.get("is_test_to_git_env", False)
-    target = "fix/bug-test" if is_test else "main"
+def _read_input_file(input_path: str):
+    """
+    读取标准输入文件 input_{run_id}.json。
+    返回 dict 或 None（文件不存在/格式非法）。
+    """
+    if not os.path.exists(input_path):
+        print("[runner] ERROR: input file not found: %s" % input_path)
+        return None
     try:
-        import git_controller
-        import importlib
-        importlib.reload(git_controller)
-        r = git_controller.switch_git_env(is_test=is_test, repo_path=repo_path)
-        if r.get("status") == "error":
-            print("[runner] Git warning (%s): %s" % (target, r.get("msg")))
-        else:
-            print("[runner] Git: %s" % target)
-    except Exception as e:
-        print("[runner] Git failed (non-blocking): %s" % e)
+        # 兼容 Windows/PowerShell 可能写出的 UTF-8 BOM
+        with open(input_path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        # 基本校验
+        if not isinstance(data, dict):
+            print("[runner] ERROR: input file is not a JSON object")
+            return None
+        if "tasks" not in data:
+            print("[runner] ERROR: input file missing 'tasks' field")
+            return None
+        return data
+    except (json.JSONDecodeError, IOError) as e:
+        print("[runner] ERROR: input file parse failed: %s" % e)
+        return None
 
 
-def execute(run_id, repo_path, project="dev-template", tasks=None, output_dir=None):
+def execute(run_id, repo_path, input_file=None, output_dir=None):
+    """
+    主执行函数。
+
+    Args:
+        run_id:     运行 ID（影刀生成）
+        repo_path:  仓库路径
+        input_file: 输入文件路径（input_{run_id}.json）
+        output_dir: 输出目录（默认 = repo_path）
+    """
     if repo_path in sys.path:
         sys.path.remove(repo_path)
     sys.path.insert(0, repo_path)
@@ -113,25 +125,72 @@ def execute(run_id, repo_path, project="dev-template", tasks=None, output_dir=No
     os.makedirs(output_dir, exist_ok=True)
     sf = os.path.join(output_dir, "runner_%s.json" % run_id)
 
+    # ── 并发锁 ──────────────────────────────────────────────
     lock = _FileLock(os.path.join(repo_path, ".runner.lock"))
     if not lock.try_acquire(timeout=0):
-        rd = {"status": "locked", "message": "Locked: %s" % repo_path, "data": {"run_id": run_id}}
+        rd = {"status": "locked", "message": "Locked: %s" % repo_path,
+              "data": {"run_id": run_id, "retryable": True,
+                       "log_path": "", "crash_snapshot_dir": "",
+                       "results": [], "warnings": [], "errors": []}}
         with open(sf, "w", encoding="utf-8") as f:
             json.dump(rd, f, ensure_ascii=False, indent=2)
         print("[runner] !! Locked: %s" % repo_path)
         return sf
 
     try:
-        cfg = _load_config(repo_path)
-        pn = project or cfg.get("project", "dev-template")
-        _switch_git(repo_path, cfg)
+        # ── 读取输入 ────────────────────────────────────────
+        project = "dev-template"
+        tasks = []
+        context = {}
+
+        if input_file:
+            input_data = _read_input_file(input_file)
+            if input_data is None:
+                # 输入文件不存在或非法 → fatal
+                rd = {"status": "fatal", "message": "Input file invalid: %s" % input_file,
+                      "data": {"run_id": run_id, "retryable": False,
+                               "log_path": "", "crash_snapshot_dir": "",
+                               "results": [], "warnings": [], "errors": []}}
+                with open(sf, "w", encoding="utf-8") as f:
+                    json.dump(rd, f, ensure_ascii=False, indent=2)
+                return sf
+            run_id = input_data.get("run_id", run_id)
+            project = input_data.get("project", "dev-template")
+            tasks = input_data.get("tasks", [])
+            context = input_data.get("context", {})
+
+        # ── 配置统一从 core.config 加载 ────────────────────
+        from core.config import PROJECT
+        if not input_file:
+            project = project or PROJECT
+
+        # ── 运行前配置自检 ───────────────────────────────
+        from core.config import validate_config
+        config_check = validate_config()
+        if config_check["fatal"]:
+            rd = {"status": "fatal",
+                  "message": "配置校验失败: %s" % config_check["message"],
+                  "data": {"run_id": run_id, "retryable": False,
+                           "log_path": "", "crash_snapshot_dir": "",
+                           "results": [], "warnings": [], "errors": [],
+                           "config_check": config_check}}
+            with open(sf, "w", encoding="utf-8") as f:
+                json.dump(rd, f, ensure_ascii=False, indent=2)
+            return sf
+
+        # ── 执行业务 ────────────────────────────────────────
         import core.entry as em
         import importlib
         importlib.reload(em)
-        rd = em.run_tasks(run_id=run_id, project=pn, tasks=tasks, repo_path=repo_path)
+        rd = em.run_tasks(run_id=run_id, project=project, tasks=tasks,
+                          context=context, repo_path=repo_path)
+
     except Exception as e:
         rd = {"status": "fatal", "message": "Runner crash: %s" % e,
-              "data": {"run_id": run_id, "traceback": traceback.format_exc()}}
+              "data": {"run_id": run_id, "retryable": False,
+                       "log_path": "", "crash_snapshot_dir": "",
+                       "results": [], "warnings": [], "errors": [],
+                       "traceback": traceback.format_exc()}}
     finally:
         lock.release()
 
@@ -143,13 +202,16 @@ def execute(run_id, repo_path, project="dev-template", tasks=None, output_dir=No
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Yingdao RPA -> Python scheduler")
-    p.add_argument("--run_id", required=True)
-    p.add_argument("--repo_path", required=True)
-    p.add_argument("--project", default="dev-template")
-    p.add_argument("--output_dir", default="")
+    p.add_argument("--run_id", required=True, help="运行 ID（影刀生成）")
+    p.add_argument("--repo_path", required=True, help="仓库绝对路径")
+    p.add_argument("--input_file", default="", help="输入文件路径 input_{run_id}.json")
+    p.add_argument("--output_dir", default="", help="输出目录（默认=repo_path）")
     a = p.parse_args()
-    st = execute(run_id=a.run_id, repo_path=a.repo_path, project=a.project,
-                 tasks=[{"id": 1, "name": "normal"}, {"id": 2, "name": "normal-B"}],
-                 output_dir=a.output_dir or a.repo_path)
+    st = execute(
+        run_id=a.run_id,
+        repo_path=a.repo_path,
+        input_file=a.input_file or None,
+        output_dir=a.output_dir or a.repo_path,
+    )
     with open(st, "r", encoding="utf-8") as f:
         print(f.read())

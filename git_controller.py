@@ -1,10 +1,18 @@
 """
-git_controller.py — Git 动态路由调度器 (CLI 模式)
-===================================================
-职能: 影刀专用，运行时动态切换 Git 分支，实现环境隔离。
-调用方式 (影刀内 BAT):
+git_controller.py — Git 部署辅助工具 (CLI 模式)
+=================================================
+职能: 部署期环境准备工具，不在任务执行链路中自动调用。
+
+用途：
+  1. 首次部署：git clone 项目仓库
+  2. 切换分支：main（生产）/ fix/bug-test（测试）
+  3. 影刀启动前手动调用（非运行时自动触发）
+
+调用方式 (影刀内 BAT / 手动):
     python git_controller.py --is_test True --repo_path D:/RPA_Project
     python git_controller.py --is_test False --repo_path D:/RPA_Project --git_url git@github.com:user/repo.git
+
+注意：任务执行时（runner.py）不会自动调用此模块。
 """
 
 import subprocess

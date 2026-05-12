@@ -1,0 +1,21 @@
+{
+  "run_id": "EXAMPLE_SYSTEM_001",
+  "project": "示例项目",
+  "tasks": [
+    {
+      "id": "task-004",
+      "name": "执行业务规则",
+      "intent": "根据订单明细生成出库计划",
+      "rule_context": "规则缺失时进入修复闭环",
+      "payload": {
+        "file_path": "data/orders_system_error.xlsx",
+        "warehouse_code": "WH-001"
+      }
+    }
+  ],
+  "context": {
+    "operator": "yingdao",
+    "env": "prod",
+    "source": "yingdao"
+  }
+}
