@@ -1,10 +1,21 @@
 """
-git_controller.py — Git 动态路由调度器 (CLI 模式)
-===================================================
-职能: 影刀专用，运行时动态切换 Git 分支，实现环境隔离。
-调用方式 (影刀内 BAT):
+git_controller.py — Git 部署辅助工具 (CLI 模式)
+=================================================
+职能: 部署期环境准备工具，不在任务执行链路中自动调用。
+
+用途：
+  1. 首次部署：git clone 项目仓库
+  2. 切换分支：main（生产）/ fix/bug-test（测试）
+  3. 在运行前完成项目初始化或环境准备
+  4. 可由人工、AI、脚本调用；不是影刀专属工具
+
+调用方式 (命令行 / AI / 手动):
     python git_controller.py --is_test True --repo_path D:/RPA_Project
     python git_controller.py --is_test False --repo_path D:/RPA_Project --git_url git@github.com:user/repo.git
+
+注意：
+  - 任务执行时（runner.py）不会自动调用此模块。
+  - 是否使用本工具并不重要，关键是先把项目仓库准备好，再进入运行期。
 """
 
 import subprocess
@@ -26,12 +37,12 @@ except AttributeError:
 
 def switch_git_env(is_test: bool, repo_path: str, git_url: str = "") -> dict:
     """
-    影刀专用 Git 环境路由调度器 (带自动初始化)
+    Git 环境准备与分支切换工具 (带自动初始化)
 
     Args:
         is_test: True -> fix/bug-test, False -> main
         repo_path: 本地仓库绝对路径
-        git_url: 远程仓库 URL，首次部署时用于 git clone
+        git_url: 远程仓库 URL，首次部署或初始化时用于 git clone
 
     Returns:
         {"status": "success|error", "current_branch": "...", "msg": "..."}
