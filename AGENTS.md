@@ -1,4 +1,4 @@
-# AGENT 工作规范
+# AGENTS 工作规范
 
 本文档面向接手本仓库的 AI Agent。目标是把业务需求稳定落到本 RPA Python 开发模板中，并保持影刀、Python、AI 三方职责清晰。
 
