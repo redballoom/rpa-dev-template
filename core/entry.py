@@ -4,7 +4,7 @@ core/entry.py — 业务执行入口
 统一输出协议（7 种状态码）：
   success | warning | retryable_error | pending_fix | failed | locked | fatal
 """
-import json, traceback
+import json, os, traceback
 from core.exceptions import BusinessException, SystemException
 from core.notifier import send_execution_summary
 from core.logger import RunLogger
@@ -25,6 +25,8 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
         tasks = []
     if context is None:
         context = {}
+    context.setdefault("repo_path", repo_path)
+    context.setdefault("project", project)
 
     logger = RunLogger(run_id, repo_path)
     logger.start(project, len(tasks))
@@ -34,8 +36,11 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
     for task in tasks:
         logger.task_start(task)
         try:
-            _process_single_task(task, project, context)
-            results.append({"task": task, "status": "ok"})
+            task_data = _process_single_task(task, project, context)
+            result_item = {"task": task, "status": "ok"}
+            if task_data is not None:
+                result_item["data"] = task_data
+            results.append(result_item)
             logger.task_end(task, "ok")
         except BusinessException as e:
             info = e.notify()
@@ -158,24 +163,57 @@ def _process_single_task(task, project, context=None):
     """
     tid = task.get("id", 0)
     tn = task.get("name", "unnamed")
-    rule_context = task.get("rule_context", "")
-    intent = task.get("intent", "")
+    task_type = task.get("type", "")
+
+    if not task_type:
+        raise SystemException(
+            message="Missing task type",
+            project=project,
+            payload={"id": tid, "name": tn, "task": task},
+            action="校验任务路由字段",
+            expected="tasks[].type 必填并对应已实现的 handler",
+            actual="tasks[].type 为空",
+            code="TASK_TYPE_MISSING",
+            exc_category="RULE_MISSING",
+            run_context=context or {},
+        )
+
+    if task_type == "calc_summary":
+        return _process_calc_summary(task, context or {})
+
+    if task_type and task_type != "template_demo":
+        raise SystemException(
+            message="Unsupported task type: %s" % task_type,
+            project=project,
+            payload={
+                "id": tid,
+                "name": tn,
+                "type": task_type,
+                "payload": task.get("payload") or {},
+            },
+            action="路由任务类型",
+            expected="tasks[].type 对应已实现的 handler",
+            actual="未找到 handler: %s" % task_type,
+            code="ROUTE_NOT_FOUND",
+            exc_category="RULE_MISSING",
+            run_context=context or {},
+        )
 
     # ── 示例：模拟不同异常场景 ──
+    # type=template_demo 仅用于模板状态码演示。
     if tid and isinstance(tid, (int, float)) and tid == -2:
         # retryable 系统异常（如网络超时）
         raise SystemException(
             message="Connection timeout", project=project,
             payload={"id": tid, "name": tn},
             action="调用外部API", expected="返回200", actual="ConnectionTimeout",
-            rule_context=rule_context, intent=intent,
             code="NETWORK_TIMEOUT", exc_category="DEPENDENCY_FAILURE",
             retryable=True, run_context=context or {},
         )
     if tid and isinstance(tid, (int, float)) and tid < 0:
         raise BusinessException(
             "Invalid ID: %d" % tid, project=project,
-            context={"id": tid, "name": tn, "rule_context": rule_context, "intent": intent},
+            context={"id": tid, "name": tn},
             code="DATA_INVALID",
             suggested_action="跳过此任务并记录",
         )
@@ -185,11 +223,52 @@ def _process_single_task(task, project, context=None):
             payload={"id": tid, "name": tn},
             action="Execute [%s]" % tn, expected="positive task_id",
             actual="got task_id=0, abort",
-            rule_context=rule_context, intent=intent,
             code="DATA_INVALID", exc_category="DATA_QUALITY",
             run_context=context or {},
         )
     return {"processed": tid}
+
+
+def _process_calc_summary(task, context):
+    payload = task.get("payload") or {}
+    numbers = payload.get("numbers", [])
+    if not isinstance(numbers, list) or not numbers:
+        raise BusinessException(
+            "payload.numbers is empty", project=context.get("project", "RPA"),
+            context={"payload": payload}, code="DATA_EMPTY",
+            suggested_action="请在 input.json 的 payload.numbers 中传入数字列表",
+        )
+
+    try:
+        values = [float(item) for item in numbers]
+    except (TypeError, ValueError):
+        raise BusinessException(
+            "payload.numbers contains non-numeric value", project=context.get("project", "RPA"),
+            context={"numbers": numbers}, code="DATA_INVALID",
+            suggested_action="请确保 payload.numbers 中的值均为数字",
+        )
+
+    total = sum(values)
+    summary = {
+        "count": len(values),
+        "sum": total,
+        "average": total / len(values),
+        "min": min(values),
+        "max": max(values),
+    }
+
+    repo_path = context.get("repo_path") or "."
+    output_file = payload.get("output_file") or "data/output/calc_result.json"
+    output_path = output_file
+    if not os.path.isabs(output_path):
+        output_path = os.path.join(repo_path, output_path)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2)
+
+    result = dict(summary)
+    result["output_file"] = output_file
+    return result
 
 
 if __name__ == "__main__":

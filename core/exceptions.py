@@ -289,6 +289,7 @@ class SystemException(Exception):
                 error_code=self.error_code, action=self.action,
                 expected=self.expected, actual=self.actual,
                 ai_analysis=ai_result,
+                run_context=self.run_context,
             )
 
         if isinstance(issue_result, dict):

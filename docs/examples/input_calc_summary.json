@@ -1,0 +1,20 @@
+{
+  "project": "计算汇总测试",
+  "tasks": [
+    {
+      "id": "calc-001",
+      "name": "计算汇总",
+      "type": "calc_summary",
+      "payload": {
+        "numbers": [10, 20, 30, 40],
+        "output_file": "data/output/calc_result.json"
+      }
+    }
+  ],
+  "context": {
+    "operator": "yingdao",
+    "env": "test",
+    "source": "shadowbot",
+    "app_name": "计算汇总测试"
+  }
+}

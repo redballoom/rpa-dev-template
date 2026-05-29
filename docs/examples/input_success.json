@@ -3,10 +3,9 @@
   "project": "示例项目",
   "tasks": [
     {
-      "id": "task-001",
+      "id": 1,
       "name": "解析订单",
-      "intent": "清洗订单数据",
-      "rule_context": "跳过取消订单",
+      "type": "template_demo",
       "payload": {
         "file_path": "data/orders_success.xlsx",
         "shop_id": "S001"
@@ -16,6 +15,7 @@
   "context": {
     "operator": "yingdao",
     "env": "prod",
-    "source": "yingdao"
+    "source": "yingdao",
+    "app_name": "示例项目"
   }
 }

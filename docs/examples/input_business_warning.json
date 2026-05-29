@@ -3,10 +3,9 @@
   "project": "示例项目",
   "tasks": [
     {
-      "id": "task-002",
+      "id": -1,
       "name": "校验订单金额",
-      "intent": "识别不可处理订单",
-      "rule_context": "金额为空时跳过并记录 warning",
+      "type": "template_demo",
       "payload": {
         "file_path": "data/orders_warning.xlsx",
         "shop_id": "S001"
@@ -16,6 +15,7 @@
   "context": {
     "operator": "yingdao",
     "env": "prod",
-    "source": "yingdao"
+    "source": "yingdao",
+    "app_name": "示例项目"
   }
 }

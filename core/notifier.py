@@ -306,6 +306,7 @@ def create_linear_issue(
     expected: str = "",
     actual: str = "",
     ai_analysis: Optional[dict] = None,
+    run_context: Optional[dict] = None,
 ) -> Any:
     """创建 Linear 工单，支持 AI 分析增强 + 指派人 + 标签"""
     # 测试分支不创建工单
@@ -334,6 +335,21 @@ def create_linear_issue(
     commit = _get_current_commit(repo_path)
 
     parts = []
+
+    # 0. 运行来源
+    rc = run_context or {}
+    if rc.get("operator") or rc.get("source"):
+        parts.append("## 运行来源")
+        src_lines = ["| 项目 | 内容 |", "|------|------|"]
+        if rc.get("operator"):
+            src_lines.append("| **触发者** | %s |" % rc["operator"])
+        if rc.get("env"):
+            src_lines.append("| **环境** | %s |" % rc["env"])
+        if rc.get("source"):
+            src_lines.append("| **来源** | %s |" % rc["source"])
+        if rc.get("app_name"):
+            src_lines.append("| **应用** | %s |" % rc["app_name"])
+        parts.append("\n".join(src_lines))
 
     # 1. 业务上下文
     if action or expected or actual:

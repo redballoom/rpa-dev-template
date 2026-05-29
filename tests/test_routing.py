@@ -65,10 +65,10 @@ def test_mixed_business_and_system():
     result = run_tasks(
         run_id="route-001", project="测试",
         tasks=[
-            {"id": 1, "name": "正常任务"},
-            {"id": -1, "name": "无效ID"},
-            {"id": 0, "name": "触发崩溃"},
-            {"id": 3, "name": "不会被执行"}
+            {"id": 1, "name": "正常任务", "type": "template_demo"},
+            {"id": -1, "name": "无效ID", "type": "template_demo"},
+            {"id": 0, "name": "触发崩溃", "type": "template_demo"},
+            {"id": 3, "name": "不会被执行", "type": "template_demo"}
         ]
     )
     assert result["status"] == "pending_fix"
@@ -87,9 +87,9 @@ def test_retryable_error_e2e():
     result = run_tasks(
         run_id="route-002", project="测试",
         tasks=[
-            {"id": 1, "name": "正常任务"},
-            {"id": -2, "name": "网络超时"},
-            {"id": 3, "name": "不会被执行"},
+            {"id": 1, "name": "正常任务", "type": "template_demo"},
+            {"id": -2, "name": "网络超时", "type": "template_demo"},
+            {"id": 3, "name": "不会被执行", "type": "template_demo"},
         ],
         context={"operator": "yingdao", "env": "prod", "source": "test"},
     )
@@ -115,7 +115,7 @@ def test_pending_fix_without_issue():
                return_value={"success": False, "issue_url": ""}):
         result = run_tasks(
             run_id="route-003", project="测试",
-            tasks=[{"id": 0, "name": "触发崩溃"}]
+            tasks=[{"id": 0, "name": "触发崩溃", "type": "template_demo"}]
         )
     assert result["status"] == "pending_fix"
     assert result["data"]["errors"][0]["issue_url"] == ""
@@ -128,7 +128,10 @@ def test_category_fields_stability():
     """warnings 和 errors 中 category 字段稳定性"""
     result = run_tasks(
         run_id="route-004", project="测试",
-        tasks=[{"id": -1, "name": "业务异常"}, {"id": 0, "name": "系统异常"}]
+        tasks=[
+            {"id": -1, "name": "业务异常", "type": "template_demo"},
+            {"id": 0, "name": "系统异常", "type": "template_demo"},
+        ]
     )
     assert result["status"] == "pending_fix"
     for warn in result["data"]["warnings"]:
@@ -139,6 +142,39 @@ def test_category_fields_stability():
         assert err["category"] == "system"
 
 
+@with_mocks
+def test_unknown_task_type_pending_fix():
+    """未知非空 type 不能假成功，应进入待修复状态"""
+    result = run_tasks(
+        run_id="route-unknown-type", project="测试",
+        tasks=[{
+            "id": "task-unknown",
+            "name": "未知任务类型",
+            "type": "missing_handler",
+            "payload": {},
+        }]
+    )
+    assert result["status"] == "pending_fix"
+    errors = result["data"]["errors"]
+    assert len(errors) == 1
+    assert errors[0]["code"] == "ROUTE_NOT_FOUND"
+    assert errors[0]["exc_category"] == "RULE_MISSING"
+
+
+@with_mocks
+def test_missing_task_type_pending_fix():
+    """缺失 type 违反输入契约，不能假成功"""
+    result = run_tasks(
+        run_id="route-missing-type", project="测试",
+        tasks=[{"id": "task-missing", "name": "缺失任务类型", "payload": {}}]
+    )
+    assert result["status"] == "pending_fix"
+    errors = result["data"]["errors"]
+    assert len(errors) == 1
+    assert errors[0]["code"] == "TASK_TYPE_MISSING"
+    assert errors[0]["exc_category"] == "RULE_MISSING"
+
+
 # ── crash snapshot 上下文 ──────────────────────────────────────
 
 @with_mocks
@@ -146,7 +182,7 @@ def test_crash_snapshot_context():
     """crash snapshot 包含完整上下文字段"""
     result = run_tasks(
         run_id="route-005", project="测试",
-        tasks=[{"id": 0, "name": "触发崩溃"}],
+        tasks=[{"id": 0, "name": "触发崩溃", "type": "template_demo"}],
         context={"operator": "yingdao", "env": "prod", "source": "test",
                  "input_file": "input_route-005.json"},
     )
@@ -193,7 +229,7 @@ def test_input_file_with_utf8_bom():
     payload = {
         "run_id": "route-bom-001",
         "project": "BOM测试",
-        "tasks": [{"id": 1, "name": "正常任务"}],
+        "tasks": [{"id": 1, "name": "正常任务", "type": "template_demo"}],
         "context": {"operator": "pytest", "env": "test", "source": "bom"},
     }
     try:

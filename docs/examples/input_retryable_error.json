@@ -3,10 +3,9 @@
   "project": "示例项目",
   "tasks": [
     {
-      "id": "task-003",
+      "id": -2,
       "name": "调用外部接口",
-      "intent": "同步订单到第三方系统",
-      "rule_context": "接口超时时允许重试",
+      "type": "template_demo",
       "payload": {
         "endpoint": "https://api.example.com/orders",
         "batch_id": "BATCH-001"
@@ -16,6 +15,7 @@
   "context": {
     "operator": "yingdao",
     "env": "prod",
-    "source": "yingdao"
+    "source": "yingdao",
+    "app_name": "示例项目"
   }
 }

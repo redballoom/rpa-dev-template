@@ -98,16 +98,13 @@ def _read_input_file(input_path: str):
         if not isinstance(data, dict):
             print("[runner] ERROR: input file is not a JSON object")
             return None
-        if "tasks" not in data:
-            print("[runner] ERROR: input file missing 'tasks' field")
-            return None
         return data
     except (json.JSONDecodeError, IOError) as e:
         print("[runner] ERROR: input file parse failed: %s" % e)
         return None
 
 
-def execute(run_id, repo_path, input_file=None, output_dir=None):
+def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, project_override=None):
     """
     主执行函数。
 
@@ -139,7 +136,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None):
 
     try:
         # ── 读取输入 ────────────────────────────────────────
-        project = "dev-template"
+        project = project_override or "dev-template"
         tasks = []
         context = {}
 
@@ -155,14 +152,16 @@ def execute(run_id, repo_path, input_file=None, output_dir=None):
                     json.dump(rd, f, ensure_ascii=False, indent=2)
                 return sf
             run_id = input_data.get("run_id", run_id)
-            project = input_data.get("project", "dev-template")
+            project = input_data.get("project", project)
             tasks = input_data.get("tasks", [])
             context = input_data.get("context", {})
+        if work_dir:
+            context.setdefault("work_dir", work_dir)
 
         # ── 配置统一从 core.config 加载 ────────────────────
         from core.config import PROJECT
         if not input_file:
-            project = project or PROJECT
+            project = project_override or project or PROJECT
 
         # ── 运行前配置自检 ───────────────────────────────
         from core.config import validate_config
@@ -206,12 +205,16 @@ if __name__ == "__main__":
     p.add_argument("--repo_path", required=True, help="仓库绝对路径")
     p.add_argument("--input_file", default="", help="输入文件路径 input_{run_id}.json")
     p.add_argument("--output_dir", default="", help="输出目录（默认=repo_path）")
+    p.add_argument("--work_dir", default="", help="影刀本次运行工作目录")
+    p.add_argument("--project", default="", help="影刀或 run.bat 传入的项目名")
     a = p.parse_args()
     st = execute(
         run_id=a.run_id,
         repo_path=a.repo_path,
         input_file=a.input_file or None,
         output_dir=a.output_dir or a.repo_path,
+        work_dir=a.work_dir or None,
+        project_override=a.project or None,
     )
     with open(st, "r", encoding="utf-8") as f:
         print(f.read())

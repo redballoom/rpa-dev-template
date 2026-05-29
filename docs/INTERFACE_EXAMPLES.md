@@ -1,40 +1,88 @@
-# 影刀与 Python 接口样例
+# 影刀与 Python 接口示例
 
-> 用途：给影刀开发、Python 开发、AI 修复统一参考，避免对输入输出协议靠口头约定。  
-> 说明：样例文件放在 [`docs/examples`](D:\CraftPJ\开发模板\docs\examples)。
+本文档说明影刀如何向 Code 项目传入业务参数，以及 Python 如何返回标准结果。
 
-## 1. 样例清单
+## 输入示例：文件汇总
 
-### 输入样例
+```json
+{
+  "project": "文件汇总项目",
+  "tasks": [
+    {
+      "id": "task-001",
+      "name": "合并文件",
+      "type": "merge_excel",
+      "payload": {
+        "source_files": ["data/input/a.xlsx", "data/input/b.xlsx"],
+        "output_file": "data/output/summary.xlsx",
+        "merge_key": "订单号"
+      }
+    }
+  ],
+  "context": {
+    "operator": "yingdao",
+    "env": "test",
+    "source": "shadowbot",
+    "app_name": "文件汇总项目"
+  }
+}
+```
 
-- `input_success.json`
-- `input_business_warning.json`
-- `input_retryable_error.json`
-- `input_system_error.json`
+## 输入示例：无 input.json
 
-### 输出样例
+影刀可以不传 `input_file`。此时 `runner.py` 不读取输入文件，业务代码使用默认逻辑：
 
-- `runner_success.json`
-- `runner_business_warning.json`
-- `runner_retryable_error.json`
-- `runner_system_error.json`
+```bat
+python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo
+```
 
-## 2. 使用方式
+## 输入示例：传 input.json
 
-### 影刀侧
+```bat
+python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo --work_dir C:\CodePJ\Demo\data --input_file C:\CodePJ\Demo\input.json
+```
 
-- 设计新流程时，先参考输入样例组织 `input_{run_id}.json`
-- 读取结果时，只按输出样例中的 `status` 和标准字段消费
-- 不自行扩展“只在某个流程里有效”的私有状态
+## 标准输出
 
-### Python / AI 侧
+Python 默认在项目根目录输出 `runner_{run_id}.json`：
 
-- 写新功能时，优先兼容这些输入样例
-- 修复 bug 时，可直接基于这些样例补测试
-- 如果协议发生升级，应先补样例再改实现
+```json
+{
+  "status": "success",
+  "message": "处理完成",
+  "data": {
+    "run_id": "rpa_001",
+    "results": [
+      {
+        "task": {
+          "id": "merge_files",
+          "name": "merge_files",
+          "type": "file_summary",
+          "payload": {
+            "output_file": "data/output/summary.xlsx"
+          }
+        },
+        "status": "ok"
+      }
+    ],
+    "warnings": [],
+    "errors": [],
+    "retryable": false,
+    "crash_snapshot_dir": "",
+    "log_path": "logs/run_rpa_001.log"
+  }
+}
+```
 
-## 3. 协议维护规则
+## 影刀消费原则
 
-- 每新增一种重要状态或异常场景，至少补 1 组输入输出样例
-- 生产问题修复后，如具备脱敏条件，应把失败样例转为文档样例或测试样例
-- 样例中的路径、账号、项目名应保持脱敏
+影刀只消费：
+
+- `status`
+- `message`
+- `data.results`
+- `data.warnings`
+- `data.errors`
+- `data.retryable`
+
+影刀不直接解析 Python 堆栈。异常排查交给日志、快照和 AI 修复流程。

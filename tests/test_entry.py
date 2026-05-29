@@ -91,7 +91,10 @@ def test_run_tasks_success():
     """正常任务 → success"""
     result = run_tasks(
         run_id="entry-001", project="测试",
-        tasks=[{"id": 1, "name": "正常任务A"}, {"id": 2, "name": "正常任务B"}]
+        tasks=[
+            {"id": 1, "name": "正常任务A", "type": "template_demo"},
+            {"id": 2, "name": "正常任务B", "type": "template_demo"},
+        ]
     )
     assert result["status"] == "success"
     assert result["data"]["retryable"] == False
@@ -103,9 +106,9 @@ def test_run_tasks_business_exception():
     result = run_tasks(
         run_id="entry-002", project="测试",
         tasks=[
-            {"id": 1, "name": "正常任务"},
-            {"id": -1, "name": "无效ID任务"},
-            {"id": 3, "name": "正常任务C"}
+            {"id": 1, "name": "正常任务", "type": "template_demo"},
+            {"id": -1, "name": "无效ID任务", "type": "template_demo"},
+            {"id": 3, "name": "正常任务C", "type": "template_demo"}
         ]
     )
     assert result["status"] == "warning"
@@ -121,9 +124,9 @@ def test_run_tasks_system_exception():
     result = run_tasks(
         run_id="entry-003", project="测试",
         tasks=[
-            {"id": 1, "name": "正常任务"},
-            {"id": 0, "name": "触发崩溃"},
-            {"id": 3, "name": "不会被执行"}
+            {"id": 1, "name": "正常任务", "type": "template_demo"},
+            {"id": 0, "name": "触发崩溃", "type": "template_demo"},
+            {"id": 3, "name": "不会被执行", "type": "template_demo"}
         ]
     )
     assert result["status"] == "pending_fix"
@@ -141,7 +144,7 @@ def test_run_tasks_output_structure():
     """输出字段完整性"""
     result = run_tasks(
         run_id="entry-004", project="测试",
-        tasks=[{"id": 1, "name": "正常任务"}]
+        tasks=[{"id": 1, "name": "正常任务", "type": "template_demo"}]
     )
     for key in ["status", "message", "data"]:
         assert key in result
