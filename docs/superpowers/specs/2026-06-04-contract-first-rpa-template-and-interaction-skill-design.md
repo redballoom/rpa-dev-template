@@ -58,7 +58,6 @@
 新增或更新文档：
 
 - `docs/任务设计模板.md`
-- `docs/AI交付检查清单.md`
 - `docs/处理器实现规范.md`
 - `README.md`
 - `docs/REQUIREMENT_TEMPLATE.md`
@@ -102,9 +101,8 @@
 
 ### 第四阶段：自动修复闭环
 
-新增或更新文档：
+更新文档：
 
-- `docs/自动修复闭环说明.md`
 - `docs/ISSUE_FIX_WORKFLOW.md`
 
 修复闭环应明确：

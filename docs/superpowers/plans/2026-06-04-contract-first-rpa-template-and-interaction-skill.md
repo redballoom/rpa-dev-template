@@ -20,18 +20,14 @@ The approved spec contains two related parts: template optimization and interact
   - Responsibility: standard contract template for each new business task.
 - Create: `docs/处理器实现规范.md`
   - Responsibility: handler structure, routing, payload validation, path handling, result summary, exception semantics.
-- Create: `docs/AI交付检查清单.md`
-  - Responsibility: checklist for AI delivery before handoff to RPA developer.
-- Create: `docs/自动修复闭环说明.md`
-  - Responsibility: failure ticket context, AI repair inputs, repair outputs, human review gates.
 - Modify: `README.md`
   - Responsibility: surface the contract-first workflow and standard deliverables.
 - Modify: `docs/REQUIREMENT_TEMPLATE.md`
   - Responsibility: align request format with the task contract.
 - Modify: `docs/ACCEPTANCE_CHECKLIST.md`
-  - Responsibility: add contract-first acceptance checks.
+  - Responsibility: add contract-first acceptance checks and AI delivery checks.
 - Modify: `docs/ISSUE_FIX_WORKFLOW.md`
-  - Responsibility: add structured repair context and post-fix handoff requirements.
+  - Responsibility: add structured repair context, AI repair inputs, repair outputs, and human review gates.
 - Create: `core/handlers/__init__.py`
   - Responsibility: package marker and future handler namespace.
 - Create: `core/handlers/record_filter.py`
@@ -50,7 +46,6 @@ The approved spec contains two related parts: template optimization and interact
 **Files:**
 - Create: `docs/任务设计模板.md`
 - Create: `docs/处理器实现规范.md`
-- Create: `docs/AI交付检查清单.md`
 - Modify: `README.md`
 - Modify: `docs/REQUIREMENT_TEMPLATE.md`
 - Modify: `docs/ACCEPTANCE_CHECKLIST.md`
@@ -190,12 +185,12 @@ def process_your_task(task, context):
 ```
 ```
 
-- [ ] **Step 3: Create the AI delivery checklist**
+- [ ] **Step 3: Merge the AI delivery checklist into acceptance checklist**
 
-Create `docs/AI交付检查清单.md` with this content:
+Update `docs/ACCEPTANCE_CHECKLIST.md` with this section:
 
 ```markdown
-# AI 交付检查清单
+## AI 交付验收
 
 ## 实现前
 
@@ -238,7 +233,7 @@ Modify `README.md` by adding this section after “推荐协作方式”:
 2. 再按 `docs/处理器实现规范.md` 实现 handler。
 3. 补充 `docs/examples/input_*.json` 示例输入。
 4. 补充或更新测试。
-5. 按 `docs/AI交付检查清单.md` 输出交付摘要。
+5. 按 `docs/ACCEPTANCE_CHECKLIST.md` 输出交付摘要。
 
 RPA 开发者主要审查业务路径、输入输出契约、结果摘要和验收点。是否推送远程、是否合并分支、是否上线仍由人工决定。
 ```
@@ -284,7 +279,7 @@ Run:
 
 ```powershell
 python -m pytest tests/test_routing.py::test_unknown_task_type_pending_fix tests/test_routing.py::test_missing_task_type_pending_fix -v
-git add README.md docs/任务设计模板.md docs/处理器实现规范.md docs/AI交付检查清单.md docs/REQUIREMENT_TEMPLATE.md docs/ACCEPTANCE_CHECKLIST.md
+git add README.md docs/任务设计模板.md docs/处理器实现规范.md docs/REQUIREMENT_TEMPLATE.md docs/ACCEPTANCE_CHECKLIST.md
 git commit -m "docs: add contract-first delivery guidelines"
 ```
 
@@ -611,16 +606,13 @@ Expected: commit succeeds.
 ## Task 3: Repair Loop Docs
 
 **Files:**
-- Create: `docs/自动修复闭环说明.md`
 - Modify: `docs/ISSUE_FIX_WORKFLOW.md`
 
-- [ ] **Step 1: Create repair loop guide**
+- [ ] **Step 1: Merge repair loop details into issue fix workflow**
 
-Create `docs/自动修复闭环说明.md`:
+Update `docs/ISSUE_FIX_WORKFLOW.md`:
 
 ```markdown
-# 自动修复闭环说明
-
 ## 目标
 
 当 Python 运行返回 `pending_fix` 或不可恢复的系统异常时，模板应提供足够上下文，让 AI 可以接手定位、修复、验证，并把结果交回人工验收。
@@ -697,7 +689,7 @@ AI 修复完成后，必须提供根因、修改摘要、验证命令、验证�
 Run:
 
 ```powershell
-git add docs/自动修复闭环说明.md docs/ISSUE_FIX_WORKFLOW.md
+git add docs/ISSUE_FIX_WORKFLOW.md
 git commit -m "docs: document automated repair loop"
 ```
 
@@ -748,7 +740,7 @@ Read these files first when they exist:
 4. `docs/PROJECT_ARCHITECTURE_OVERVIEW.md`
 5. `docs/任务设计模板.md`
 6. `docs/处理器实现规范.md`
-7. `docs/AI交付检查清单.md`
+7. `docs/ACCEPTANCE_CHECKLIST.md`
 
 ## Workflow
 

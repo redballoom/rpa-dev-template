@@ -61,9 +61,7 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/REQUIREMENT_TEMPLATE.md](docs/REQUIREMENT_TEMPLATE.md) | 给 AI 开发业务代码时的需求模板 |
 | [docs/任务设计模板.md](docs/任务设计模板.md) | 新业务实现前的任务契约模板 |
 | [docs/处理器实现规范.md](docs/处理器实现规范.md) | handler 路由、payload、异常和结果摘要规范 |
-| [docs/AI交付检查清单.md](docs/AI交付检查清单.md) | AI 交付前自检清单 |
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
-| [docs/自动修复闭环说明.md](docs/自动修复闭环说明.md) | 自动修复工单上下文和人工验收节点 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
 
@@ -84,7 +82,7 @@ run.bat {run_id} {work_dir} {input_file}
 2. 再按 `docs/处理器实现规范.md` 实现 handler。
 3. 补充 `docs/examples/input_*.json` 示例输入。
 4. 补充或更新测试。
-5. 按 `docs/AI交付检查清单.md` 输出交付摘要。
+5. 按 `docs/ACCEPTANCE_CHECKLIST.md` 输出交付摘要。
 
 RPA 开发者主要审查业务路径、输入输出契约、结果摘要和验收点。是否推送远程、是否合并分支、是否上线仍由人工决定。
 

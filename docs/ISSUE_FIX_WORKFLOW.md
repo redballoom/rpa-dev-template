@@ -2,6 +2,10 @@
 
 当影刀运行后发现 Python 业务处理失败，按此流程交给 AI 或人工修复。
 
+## 目标
+
+当 Python 运行返回 `pending_fix` 或不可恢复的系统异常时，模板应提供足够上下文，让 AI 可以接手定位、修复、验证，并把结果交回人工验收。
+
 ## 触发条件
 
 - `runner_{run_id}.json.status == "pending_fix"`
@@ -40,6 +44,20 @@
 
 AI 修复完成后，必须提供根因、修改摘要、验证命令、验证结果和剩余风险。是否推送、合并和上线由人工决定。
 
+## 故障上下文最小字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `run_id` | 本次运行 ID |
+| `project` | 项目名称 |
+| `tasks[]` | 触发异常的任务 |
+| `tasks[].type` | 路由键 |
+| `tasks[].payload` | 业务输入参数 |
+| `runner_{run_id}.json` | 标准执行结果 |
+| `logs/run_{run_id}.log` | 运行日志 |
+| `crash_snapshots/crash_{run_id}.json` | 系统异常快照 |
+| 业务输入文件 | 位于 `data/input/` 或 payload 指定路径 |
+
 ## AI 修复步骤
 
 1. 阅读 `docs/SHADOWBOT_INPUT_CONTRACT.md` 和 `docs/RPA_PYTHON_BOUNDARY.md`。
@@ -48,6 +66,35 @@ AI 修复完成后，必须提供根因、修改摘要、验证命令、验证�
 4. 修改 Python 业务代码，不默认修改影刀流程。
 5. 补充或更新测试、示例输入和文档。
 6. 给出验证方式和剩余风险。
+
+## AI 修复前必须读取
+
+1. `README.md`
+2. `docs/SHADOWBOT_INPUT_CONTRACT.md`
+3. `docs/RPA_PYTHON_BOUNDARY.md`
+4. `docs/PROJECT_ARCHITECTURE_OVERVIEW.md`
+5. `docs/任务设计模板.md`
+6. `docs/处理器实现规范.md`
+7. `docs/ISSUE_FIX_WORKFLOW.md`
+8. 相关 `runner_{run_id}.json`、日志和 crash snapshot
+
+## AI 修复后必须交付
+
+- 根因说明。
+- 修改文件摘要。
+- 新增或更新的测试。
+- 已运行的验证命令和结果。
+- 业务输出文件路径。
+- `runner_{run_id}.json.status` 的预期值。
+- 剩余风险。
+
+## 人工验收节点
+
+- 是否接受修复。
+- 是否重跑影刀流程。
+- 是否推送远程。
+- 是否合并主分支。
+- 是否上线。
 
 ## 修复完成定义
 
