@@ -18,6 +18,15 @@
 - 系统异常快照写入 `crash_snapshots/`。
 - 影刀只依赖 `runner_{run_id}.json` 做流程分支。
 
+## 契约优先验收
+
+- 已有任务设计说明，且 `tasks[].type` 与实现路由一致。
+- `payload` 字段说明与示例输入一致。
+- handler 职责说明能映射业务路径。
+- `results[].data` 摘要字段稳定、可供影刀或人工审查。
+- warning / error 场景与异常类型一致。
+- 人工验收、推送、合并、上线节点没有被自动化替代。
+
 ## 代码
 
 - `runner.py` 支持 `--run_id`、`--repo_path`、`--input_file`、`--work_dir`、`--project`。

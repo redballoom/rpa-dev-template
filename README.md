@@ -59,6 +59,9 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/RPA_PYTHON_BOUNDARY.md](docs/RPA_PYTHON_BOUNDARY.md) | 影刀、Python、AI 的职责边界 |
 | [docs/INTERFACE_EXAMPLES.md](docs/INTERFACE_EXAMPLES.md) | 输入输出协议示例 |
 | [docs/REQUIREMENT_TEMPLATE.md](docs/REQUIREMENT_TEMPLATE.md) | 给 AI 开发业务代码时的需求模板 |
+| [docs/任务设计模板.md](docs/任务设计模板.md) | 新业务实现前的任务契约模板 |
+| [docs/处理器实现规范.md](docs/处理器实现规范.md) | handler 路由、payload、异常和结果摘要规范 |
+| [docs/AI交付检查清单.md](docs/AI交付检查清单.md) | AI 交付前自检清单 |
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
@@ -71,6 +74,18 @@ run.bat {run_id} {work_dir} {input_file}
 4. Python 输出 `runner_{run_id}.json`。
 5. 影刀只消费 `runner_{run_id}.json` 的 `status`、`message` 和 `data`，不直接解析 Python 堆栈。
 6. AI 后续只在 Code 项目内修改 Python 业务代码、测试和文档，默认不改影刀 UI 流程。
+
+## AI 开发业务的标准交付物
+
+新增或修改业务任务时，优先采用契约优先流程：
+
+1. 先按 `docs/任务设计模板.md` 明确任务契约。
+2. 再按 `docs/处理器实现规范.md` 实现 handler。
+3. 补充 `docs/examples/input_*.json` 示例输入。
+4. 补充或更新测试。
+5. 按 `docs/AI交付检查清单.md` 输出交付摘要。
+
+RPA 开发者主要审查业务路径、输入输出契约、结果摘要和验收点。是否推送远程、是否合并分支、是否上线仍由人工决定。
 
 ## 状态码
 
