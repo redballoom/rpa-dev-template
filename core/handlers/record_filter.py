@@ -55,7 +55,7 @@ def process_filter_records(task, context):
         )
 
     try:
-        with open(input_path, "r", encoding="utf-8") as f:
+        with open(input_path, "r", encoding="utf-8-sig") as f:
             source = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemException(

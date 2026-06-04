@@ -19,6 +19,12 @@ def _write_json(path, payload):
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
 
+def _write_json_bom(path, payload):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8-sig") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
 @patch("core.entry.send_execution_summary", _mock_send_summary)
 def test_filter_records_success(tmp_path):
     repo_path = str(tmp_path)
@@ -59,6 +65,33 @@ def test_filter_records_success(tmp_path):
     with open(output_path, "r", encoding="utf-8") as f:
         output = json.load(f)
     assert [item["id"] for item in output["records"]] == ["a", "c"]
+
+
+@patch("core.entry.send_execution_summary", _mock_send_summary)
+def test_filter_records_accepts_utf8_bom_input(tmp_path):
+    repo_path = str(tmp_path)
+    input_file = tmp_path / "data" / "input" / "records.json"
+    _write_json_bom(str(input_file), {
+        "records": [
+            {"id": "a", "status": "ready"},
+            {"id": "b", "status": "skip"},
+        ]
+    })
+
+    result = run_tasks(
+        run_id="filter-bom",
+        project="测试",
+        repo_path=repo_path,
+        tasks=[{
+            "id": "filter-bom",
+            "name": "BOM JSON",
+            "type": "filter_records",
+            "payload": {"input_file": "data/input/records.json"},
+        }],
+    )
+
+    assert result["status"] == "success"
+    assert result["data"]["results"][0]["data"]["matched_count"] == 1
 
 
 @patch("core.entry.send_execution_summary", _mock_send_summary)
