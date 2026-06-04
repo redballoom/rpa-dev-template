@@ -70,6 +70,15 @@ def process_filter_records(task, context):
             run_context=context,
         )
 
+    if not isinstance(source, dict):
+        raise BusinessException(
+            "input JSON root must be an object",
+            project=project,
+            context={"input_file": input_file},
+            code="DATA_INVALID",
+            suggested_action="请确认输入 JSON 顶层是对象，并包含 records 数组",
+        )
+
     records = source.get("records")
     if not isinstance(records, list) or not records:
         raise BusinessException(
@@ -78,6 +87,15 @@ def process_filter_records(task, context):
             context={"input_file": input_file},
             code="DATA_EMPTY",
             suggested_action="请确认输入 JSON 中包含非空 records 数组",
+        )
+
+    if any(not isinstance(item, dict) for item in records):
+        raise BusinessException(
+            "records item must be an object",
+            project=project,
+            context={"input_file": input_file},
+            code="DATA_INVALID",
+            suggested_action="请确认 records 数组中的每条记录都是对象",
         )
 
     matched = [item for item in records if item.get(status_field) == match_value]

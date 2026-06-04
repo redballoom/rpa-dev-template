@@ -36,16 +36,17 @@ python runner.py --run_id {run_id} --repo_path {repo_path} --work_dir {work_dir}
 
 ```json
 {
-  "project": "文件汇总项目",
+  "project": "开发模板",
   "tasks": [
     {
-      "id": "task-001",
-      "name": "合并文件",
-      "type": "merge_excel",
+      "id": "filter-001",
+      "name": "筛选待处理记录",
+      "type": "filter_records",
       "payload": {
-        "source_files": ["data/input/a.xlsx", "data/input/b.xlsx"],
-        "output_file": "data/output/summary.xlsx",
-        "merge_key": "订单号"
+        "input_file": "data/input/records.json",
+        "output_file": "data/output/filtered_records.json",
+        "status_field": "status",
+        "match_value": "ready"
       }
     }
   ],
@@ -70,4 +71,8 @@ python runner.py --run_id {run_id} --repo_path {repo_path} --work_dir {work_dir}
 | `context.operator` | 推荐 | 触发者，写入 crash snapshot 和 Linear 工单 |
 | `context.env` | 推荐 | 环境（test/prod），写入 crash snapshot 和 Linear 工单 |
 | `context.source` | 推荐 | 调用来源，写入 crash snapshot 和 Linear 工单 |
-| `context.app_name` | 可选 | 应用名，写入 Linear 工单
+| `context.app_name` | 可选 | 应用名，写入 Linear 工单 |
+
+## 示例类型说明
+
+模板内置的可运行示例任务用于演示框架能力，不代表真实业务逻辑。真实业务接入时，AI 应先拟定 `input.json` 契约，并在用户确认后新增对应 handler。

@@ -51,6 +51,8 @@ run.bat {run_id} {work_dir} {input_file}
 
 `run_id` 不要求写入 `input.json`。影刀或 BAT 通过命令行传给 `runner.py`，用于生成 `runner_{run_id}.json` 和日志。
 
+模板只内置少量可运行示例任务，用于演示路由、payload、输出和异常语义。真实业务接入时，AI 应先拟定业务 `input.json` 契约，经人工确认后再新增对应 handler。
+
 ## 文档导航
 
 | 文档 | 用途 |
@@ -79,10 +81,11 @@ run.bat {run_id} {work_dir} {input_file}
 新增或修改业务任务时，优先采用契约优先流程：
 
 1. 先按 `docs/任务设计模板.md` 明确任务契约。
-2. 再按 `docs/处理器实现规范.md` 实现 handler。
-3. 补充 `docs/examples/input_*.json` 示例输入。
-4. 补充或更新测试。
-5. 按 `docs/ACCEPTANCE_CHECKLIST.md` 输出交付摘要。
+2. 先拟定影刀需要生成的 `input.json` 示例。
+3. 再按 `docs/处理器实现规范.md` 实现 handler。
+4. 补充 `docs/examples/input_*.json` 示例输入。
+5. 补充或更新测试。
+6. 按 `docs/ACCEPTANCE_CHECKLIST.md` 输出交付摘要。
 
 RPA 开发者主要审查业务路径、输入输出契约、结果摘要和验收点。是否推送远程、是否合并分支、是否上线仍由人工决定。
 

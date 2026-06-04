@@ -83,6 +83,50 @@ def test_filter_records_empty_records_warning(tmp_path):
     assert result["data"]["warnings"][0]["code"] == "DATA_EMPTY"
 
 
+@patch("core.entry.send_execution_summary", _mock_send_summary)
+def test_filter_records_root_must_be_object(tmp_path):
+    repo_path = str(tmp_path)
+    input_file = tmp_path / "data" / "input" / "records.json"
+    _write_json(str(input_file), [])
+
+    result = run_tasks(
+        run_id="filter-root-invalid",
+        project="测试",
+        repo_path=repo_path,
+        tasks=[{
+            "id": "filter-root-invalid",
+            "name": "根对象格式错误",
+            "type": "filter_records",
+            "payload": {"input_file": "data/input/records.json"},
+        }],
+    )
+
+    assert result["status"] == "warning"
+    assert result["data"]["warnings"][0]["code"] == "DATA_INVALID"
+
+
+@patch("core.entry.send_execution_summary", _mock_send_summary)
+def test_filter_records_items_must_be_objects(tmp_path):
+    repo_path = str(tmp_path)
+    input_file = tmp_path / "data" / "input" / "records.json"
+    _write_json(str(input_file), {"records": [{"id": "a", "status": "ready"}, "bad"]})
+
+    result = run_tasks(
+        run_id="filter-item-invalid",
+        project="测试",
+        repo_path=repo_path,
+        tasks=[{
+            "id": "filter-item-invalid",
+            "name": "记录项格式错误",
+            "type": "filter_records",
+            "payload": {"input_file": "data/input/records.json"},
+        }],
+    )
+
+    assert result["status"] == "warning"
+    assert result["data"]["warnings"][0]["code"] == "DATA_INVALID"
+
+
 def test_filter_records_missing_file_system_exception(tmp_path):
     from core.handlers.record_filter import process_filter_records
 
