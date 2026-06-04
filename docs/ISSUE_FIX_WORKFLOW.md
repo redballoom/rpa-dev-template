@@ -23,6 +23,23 @@
 - `data/input/` 中的脱敏样本
 - `data/output/` 中的错误输出或缺失说明
 
+## 结构化故障工单要求
+
+故障工单至少包含：
+
+- `run_id`
+- 项目名称
+- 触发异常的 `tasks[].type`
+- 触发异常的 `payload`
+- `runner_{run_id}.json` 路径或内容摘要
+- 日志路径
+- crash snapshot 路径
+- 期望业务结果
+- 当前实际结果
+- 是否允许修改影刀流程，默认否
+
+AI 修复完成后，必须提供根因、修改摘要、验证命令、验证结果和剩余风险。是否推送、合并和上线由人工决定。
+
 ## AI 修复步骤
 
 1. 阅读 `docs/SHADOWBOT_INPUT_CONTRACT.md` 和 `docs/RPA_PYTHON_BOUNDARY.md`。

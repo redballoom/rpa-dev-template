@@ -63,6 +63,7 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/处理器实现规范.md](docs/处理器实现规范.md) | handler 路由、payload、异常和结果摘要规范 |
 | [docs/AI交付检查清单.md](docs/AI交付检查清单.md) | AI 交付前自检清单 |
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
+| [docs/自动修复闭环说明.md](docs/自动修复闭环说明.md) | 自动修复工单上下文和人工验收节点 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
 
