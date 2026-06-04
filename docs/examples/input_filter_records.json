@@ -1,0 +1,22 @@
+{
+  "project": "开发模板",
+  "tasks": [
+    {
+      "id": "filter-001",
+      "name": "筛选待处理记录",
+      "type": "filter_records",
+      "payload": {
+        "input_file": "data/input/records.json",
+        "output_file": "data/output/filtered_records.json",
+        "status_field": "status",
+        "match_value": "ready"
+      }
+    }
+  ],
+  "context": {
+    "operator": "yingdao",
+    "env": "test",
+    "source": "shadowbot",
+    "app_name": "开发模板"
+  }
+}

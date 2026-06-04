@@ -6,6 +6,7 @@ core/entry.py — 业务执行入口
 """
 import json, os, traceback
 from core.exceptions import BusinessException, SystemException
+from core.handlers.record_filter import process_filter_records
 from core.notifier import send_execution_summary
 from core.logger import RunLogger
 
@@ -180,6 +181,9 @@ def _process_single_task(task, project, context=None):
 
     if task_type == "calc_summary":
         return _process_calc_summary(task, context or {})
+
+    if task_type == "filter_records":
+        return process_filter_records(task, context or {})
 
     if task_type and task_type != "template_demo":
         raise SystemException(
