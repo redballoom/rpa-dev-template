@@ -27,7 +27,7 @@ def _load_json_file(path: str) -> dict:
     if not os.path.exists(path):
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     except (json.JSONDecodeError, IOError) as e:
         print("[config] WARN: %s read failed: %s" % (os.path.basename(path), e))
@@ -69,12 +69,15 @@ LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
 LINEAR_PROJECT_NAME = _linear_cfg.get("project_name", "")
 LINEAR_PROJECT_ID = _linear_cfg.get("project_id", "")
 LINEAR_ASSIGNEE_ID = _linear_cfg.get("assignee_id", "")
+PRODUCTION_BRANCHES = _cfg.get("production_branches", ["main"])
+if isinstance(PRODUCTION_BRANCHES, str):
+    PRODUCTION_BRANCHES = [PRODUCTION_BRANCHES]
 
 # ── AI 分析 (Volcengine Ark) ────────────────────────────────
 _ai_cfg = _cfg.get("ai", {})
 AI_ENABLED = _ai_cfg.get("enabled", False)
 AI_API_KEY = _ai_cfg.get("api_key", "")
-AI_MODEL = _ai_cfg.get("model", "ep-20260509143138-njpgt")
+AI_MODEL = _ai_cfg.get("model", "")
 AI_TIMEOUT = _ai_cfg.get("timeout", 15)
 
 # ── 配置校验 ────────────────────────────────────────────────
@@ -113,6 +116,8 @@ def validate_config() -> dict:
     # AI 启用但缺 API Key
     if AI_ENABLED and not AI_API_KEY:
         warnings.append("AI 分析已启用但 API Key 未配置 (AI_API_KEY)")
+    if AI_ENABLED and not AI_MODEL:
+        warnings.append("AI 分析已启用但模型未配置 (AI_MODEL)")
 
     is_fatal = len(missing) > 0
     parts = []

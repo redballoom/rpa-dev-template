@@ -43,6 +43,8 @@ python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo
 python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo --work_dir C:\CodePJ\Demo\data --input_file C:\CodePJ\Demo\input.json
 ```
 
+`input.json` 不包含顶层 `run_id`。运行 ID 只由命令行 `--run_id` 提供，Python 输出文件名和 `data.run_id` 都使用该值。
+
 ## 标准输出
 
 Python 默认在项目根目录输出 `runner_{run_id}.json`：

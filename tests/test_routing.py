@@ -252,6 +252,39 @@ def test_input_file_with_utf8_bom():
                 pass
 
 
+def test_cli_run_id_is_source_of_truth_when_input_contains_run_id():
+    """命令行 run_id 是输出协议的唯一运行 ID 来源"""
+    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    input_path = os.path.join(repo_path, "input_route_cli_run_id.json")
+    payload = {
+        "run_id": "input-should-not-win",
+        "project": "RunID测试",
+        "tasks": [{"id": 1, "name": "正常任务", "type": "template_demo"}],
+        "context": {"operator": "pytest", "env": "test", "source": "run-id"},
+    }
+    output_path = os.path.join(repo_path, "runner_cli-run-id-wins.json")
+    overwritten_output_path = os.path.join(repo_path, "runner_input-should-not-win.json")
+    try:
+        with open(input_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        sf = execute(
+            run_id="cli-run-id-wins",
+            repo_path=repo_path,
+            input_file=input_path,
+        )
+        assert sf == output_path
+        assert not os.path.exists(overwritten_output_path)
+        with open(sf, "r", encoding="utf-8") as f:
+            result = json.load(f)
+        assert result["data"]["run_id"] == "cli-run-id-wins"
+    finally:
+        for path in [input_path, output_path, overwritten_output_path]:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 def test_exception_codes():
     """异常编码体系完整性"""
     assert "DATA_INVALID" in BUSINESS_CODES

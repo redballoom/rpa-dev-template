@@ -151,7 +151,6 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
                 with open(sf, "w", encoding="utf-8") as f:
                     json.dump(rd, f, ensure_ascii=False, indent=2)
                 return sf
-            run_id = input_data.get("run_id", run_id)
             project = input_data.get("project", project)
             tasks = input_data.get("tasks", [])
             context = input_data.get("context", {})

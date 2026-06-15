@@ -49,7 +49,7 @@ run.bat {run_id} {work_dir} {input_file}
 }
 ```
 
-`run_id` 不要求写入 `input.json`。影刀或 BAT 通过命令行传给 `runner.py`，用于生成 `runner_{run_id}.json` 和日志。
+`run_id` 不写入 `input.json`。影刀或 BAT 通过命令行传给 `runner.py`，用于生成 `runner_{run_id}.json`、日志和结果中的 `data.run_id`。
 
 模板只内置少量可运行示例任务，用于演示路由、payload、输出和异常语义。真实业务接入时，AI 应先拟定业务 `input.json` 契约，经人工确认后再新增对应 handler。
 

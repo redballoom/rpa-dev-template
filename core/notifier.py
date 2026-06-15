@@ -45,6 +45,7 @@ from core.config import (
     LINEAR_PROJECT_NAME,
     LINEAR_PROJECT_ID,
     LINEAR_ASSIGNEE_ID,
+    PRODUCTION_BRANCHES,
 )
 
 
@@ -101,6 +102,9 @@ def send_execution_summary(
                 line = "**· 任务[%s]** → [%s/%s] %s" % (task_name, exc_cat, code, msg)
             if issue_url:
                 line += "\n  → [查看工单](%s)" % issue_url
+            ai_summary = err.get("ai_summary", "")
+            if ai_summary:
+                line += "\n  → AI摘要: %s" % ai_summary[:120]
             if need_review:
                 line += "\n  ⚠️ 需人工复核"
             if confidence:
@@ -141,6 +145,8 @@ def send_execution_summary(
 
 def _feishu_post(data: dict) -> bool:
     """飞书 Webhook POST 封装"""
+    if not FEISHU_WEBHOOK:
+        return True
     try:
         r = requests.post(FEISHU_WEBHOOK, json=data, timeout=10)
         result = r.json()
@@ -510,4 +516,4 @@ def _get_current_commit(repo_path: str = ".") -> str:
 
 
 def _is_production_env(repo_path: str = ".") -> bool:
-    return _get_current_branch(repo_path) == "main"
+    return _get_current_branch(repo_path) in PRODUCTION_BRANCHES

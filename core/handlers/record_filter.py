@@ -51,6 +51,7 @@ def process_filter_records(task, context):
             actual="文件不存在: %s" % input_file,
             code="INPUT_FILE_MISSING",
             exc_category="ENVIRONMENT_ISSUE",
+            fix_target="rpa",  # 文件不存在通常是影刀下载失败，需修复影刀流程
             run_context=context,
         )
 

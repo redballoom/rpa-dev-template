@@ -20,6 +20,8 @@ python runner.py --run_id {run_id} --repo_path {repo_path} --work_dir {work_dir}
 
 不传 `input_file` 时，`runner.py` 按默认逻辑运行。
 
+`run_id` 由影刀或 BAT 通过命令行传入，不写入 `input.json`。即使输入文件中出现顶层 `run_id`，Python 也以命令行 `--run_id` 为准。
+
 ## 文件位置
 
 | 文件或目录 | 说明 |

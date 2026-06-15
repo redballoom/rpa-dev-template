@@ -7,6 +7,7 @@ tests/test_config.py — 配置模块测试
 """
 import sys
 import os
+import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -30,6 +31,16 @@ def test_validate_config_default():
     assert "missing" in result
     assert "warnings" in result
     assert "message" in result
+
+
+def test_load_json_file_accepts_utf8_bom(tmp_path):
+    """配置 JSON 兼容 Windows PowerShell 写出的 UTF-8 BOM"""
+    from core.config import _load_json_file
+
+    path = tmp_path / "project.json"
+    path.write_text(json.dumps({"project": "BOM配置"}), encoding="utf-8-sig")
+
+    assert _load_json_file(str(path))["project"] == "BOM配置"
 
 
 def test_validate_config_fields():
@@ -58,15 +69,19 @@ def test_validate_config_missing_field():
 
 
 def test_validate_config_ai_warning():
-    """AI 启用但缺 API Key → 产生警告"""
+    """AI 启用但缺 API Key 或模型 → 产生警告"""
     import core.config as cfg
     original_enabled = cfg.AI_ENABLED
     original_key = cfg.AI_API_KEY
+    original_model = cfg.AI_MODEL
     try:
         cfg.AI_ENABLED = True
         cfg.AI_API_KEY = ""
+        cfg.AI_MODEL = ""
         result = cfg.validate_config()
         assert any("API Key" in w for w in result["warnings"])
+        assert any("模型" in w for w in result["warnings"])
     finally:
         cfg.AI_ENABLED = original_enabled
         cfg.AI_API_KEY = original_key
+        cfg.AI_MODEL = original_model

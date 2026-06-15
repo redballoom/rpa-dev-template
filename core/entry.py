@@ -5,13 +5,20 @@ core/entry.py — 业务执行入口
   success | warning | retryable_error | pending_fix | failed | locked | fatal
 """
 import json, os, traceback
+from typing import Dict, List, Any, Optional, Tuple
 from core.exceptions import BusinessException, SystemException
 from core.handlers.record_filter import process_filter_records
 from core.notifier import send_execution_summary
 from core.logger import RunLogger
 
 
-def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_path="."):
+def run_tasks(
+    run_id: str,
+    project: str = "dev-template",
+    tasks: Optional[List[Dict[str, Any]]] = None,
+    context: Optional[Dict[str, Any]] = None,
+    repo_path: str = "."
+) -> Dict[str, Any]:
     """
     执行任务列表，返回标准化结果 JSON。
 
@@ -21,6 +28,9 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
         tasks:     任务列表，来自 input_{run_id}.json
         context:   运行时上下文（operator/env/source/input_file 等）
         repo_path: 仓库路径（用于写 snapshot 和日志）
+
+    Returns:
+        包含 status、message、data 的标准化结果字典
     """
     if tasks is None:
         tasks = []
@@ -66,6 +76,12 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
                 "retryable": info.get("retryable", False),
                 "issue_url": info.get("issue_url", ""),
                 # AI 增强字段
+                "ai_summary": ai.get("summary", ""),
+                "ai_root_cause": ai.get("root_cause", ""),
+                "ai_suggested_fix": ai.get("suggested_fix", ""),
+                "ai_category": ai.get("category", ""),
+                "ai_priority": ai.get("priority", ""),
+                "ai_severity": ai.get("severity", ""),
                 "confidence": ai.get("confidence", ""),
                 "need_human_review": ai.get("need_human_review", False),
                 "test_suggestion": ai.get("test_suggestion", ""),
@@ -93,6 +109,12 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
                 "retryable": False,
                 "issue_url": info.get("issue_url", ""),
                 # 兜底异常无 AI 分析
+                "ai_summary": "",
+                "ai_root_cause": "",
+                "ai_suggested_fix": "",
+                "ai_category": "",
+                "ai_priority": "",
+                "ai_severity": "",
                 "confidence": "",
                 "need_human_review": True,
                 "test_suggestion": "",
@@ -134,7 +156,12 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
     }
 
 
-def _determine_status(errors, warnings, success_count, total):
+def _determine_status(
+    errors: List[Dict[str, Any]],
+    warnings: List[Dict[str, Any]],
+    success_count: int,
+    total: int
+) -> Tuple[str, str]:
     """根据异常情况判定状态码和消息
 
     语义说明：
@@ -142,6 +169,9 @@ def _determine_status(errors, warnings, success_count, total):
                    不再依赖 issue_url（工单创建可能失败），状态码由错误本身决定
       retryable_error: 系统异常且可重试
       failed:  保留给 runner 级别的崩溃（execute() 中使用），不在 run_tasks 中产生
+
+    Returns:
+        (status, message) 元组
     """
     if errors:
         has_retryable = any(e.get("retryable") for e in errors)
@@ -156,11 +186,23 @@ def _determine_status(errors, warnings, success_count, total):
     return "warning", "完成，%d 个任务被跳过" % len(warnings)
 
 
-def _process_single_task(task, project, context=None):
+def _process_single_task(
+    task: Dict[str, Any],
+    project: str,
+    context: Optional[Dict[str, Any]] = None
+) -> Any:
     """
     处理单个任务。
     当前为模板示例：根据 task.id 模拟不同异常。
     实际业务模块应替换此函数内容。
+
+    Args:
+        task: 任务字典，包含 type、payload 等字段
+        project: 项目名称
+        context: 运行时上下文
+
+    Returns:
+        任务处理结果，写入 results[].data
     """
     tid = task.get("id", 0)
     tn = task.get("name", "unnamed")
@@ -233,7 +275,20 @@ def _process_single_task(task, project, context=None):
     return {"processed": tid}
 
 
-def _process_calc_summary(task, context):
+def _process_calc_summary(
+    task: Dict[str, Any],
+    context: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    计算汇总任务处理器。
+
+    Args:
+        task: 任务字典，包含 payload.numbers
+        context: 运行时上下文，包含 repo_path、project
+
+    Returns:
+        包含 count、sum、average、min、max、output_file 的结果字典
+    """
     payload = task.get("payload") or {}
     numbers = payload.get("numbers", [])
     if not isinstance(numbers, list) or not numbers:

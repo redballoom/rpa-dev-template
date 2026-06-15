@@ -1,6 +1,7 @@
 {
     "project": "开发模板",
     "version": "2.0.0",
+    "production_branches": ["main"],
     "feishu_webhook": "",
     "linear": {
         "api_key": "",
@@ -12,7 +13,7 @@
     "ai": {
         "enabled": false,
         "api_key": "",
-        "model": "glm-4-7-251222",
+        "model": "",
         "timeout": 30
     }
 }

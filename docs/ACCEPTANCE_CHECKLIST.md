@@ -7,7 +7,7 @@
 - `input.json` 位于项目根目录。
 - 业务差异集中在 `payload`。
 - 业务输入文件位于 `data/input/` 或 `payload` 明确指定的位置。
-- `run_id` 不强制写入 `input.json`，可由影刀或 BAT 通过命令行传入。
+- `run_id` 不写入 `input.json`，由影刀或 BAT 通过命令行传入，并作为输出文件和结果数据的唯一运行 ID。
 - 未传 `input_file` 时，`runner.py` 不读取 `input.json`。
 
 ## 输出契约

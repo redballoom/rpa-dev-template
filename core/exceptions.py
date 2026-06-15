@@ -117,6 +117,7 @@ class SystemException(Exception):
       need_snapshot:  是否需要写 crash snapshot（默认 True）
       need_issue:     是否需要创建 Linear 工单（默认 True）
       run_context:    运行时上下文（operator/env/source/input_file 等）
+      fix_target:     修复目标，指示由哪一层修复（python / rpa / upstream）
     """
 
     def __init__(
@@ -137,6 +138,7 @@ class SystemException(Exception):
         need_snapshot: bool = True,
         need_issue: bool = True,
         run_context: Optional[dict] = None,
+        fix_target: str = "auto",
     ):
         super().__init__(message)
         self.project = project
@@ -157,6 +159,11 @@ class SystemException(Exception):
         self.need_snapshot = need_snapshot
         self.need_issue = need_issue
         self.run_context = run_context or {}
+        # 修复目标：自动推断或显式设置
+        if fix_target == "auto":
+            self.fix_target = self._infer_fix_target()
+        else:
+            self.fix_target = fix_target
         # 解析 traceback
         parsed = _parse_traceback(self.traceback_str)
         self.error_type = parsed["error_type"]
@@ -164,6 +171,54 @@ class SystemException(Exception):
         self.error_function = parsed["function"]
         self.error_line = parsed["line_no"]
         self.error_code = parsed["code_line"]
+
+    def _infer_fix_target(self) -> str:
+        """根据异常分类和消息自动推断修复目标
+
+        推断规则：
+        - UI_CHANGED: 页面结构变化 → rpa（需要重新捕获元素）
+        - ENVIRONMENT_ISSUE + "文件不存在": → rpa（影刀下载失败）
+        - ENVIRONMENT_ISSUE + "权限": → python（配置问题）
+        - THIRD_PARTY_LIMIT: 反爬/限流 → python（需要对抗措施）
+        - DEPENDENCY_FAILURE: 网络/API故障 → python（需要重试机制）
+        - DATA_QUALITY/RULE_MISSING/LOGIC_DEFECT: → python（代码逻辑问题）
+
+        Returns:
+            "python": AI 修改 Python 代码可以解决
+            "rpa": 需要修改影刀流程
+            "upstream": 上游数据源问题，需要联系第三方
+        """
+        # UI 层变化 → 影刀需要重新捕获元素
+        if self.exc_category == "UI_CHANGED":
+            return "rpa"
+
+        # 环境问题：需要进一步判断
+        if self.exc_category == "ENVIRONMENT_ISSUE":
+            msg_lower = self.message.lower()
+            # 文件不存在、路径错误 → 通常是影刀下载/路径配置问题
+            if any(kw in msg_lower for kw in ["not found", "不存在", "no such file", "does not exist"]):
+                return "rpa"
+            # 权限、配置问题 → Python 配置
+            if any(kw in msg_lower for kw in ["permission", "权限", "config", "配置"]):
+                return "python"
+            # 兜底：环境问题默认归影刀
+            return "rpa"
+
+        # 第三方平台限制（反爬、限流、验证码）→ Python 需要增加对抗措施
+        if self.exc_category == "THIRD_PARTY_LIMIT":
+            return "python"
+
+        # 依赖故障（网络、API 超时）→ Python 加重试/降级
+        if self.exc_category == "DEPENDENCY_FAILURE":
+            return "python"
+
+        # 数据质量、业务规则缺失、逻辑缺陷 → Python 代码问题
+        if self.exc_category in ["DATA_QUALITY", "RULE_MISSING", "LOGIC_DEFECT"]:
+            return "python"
+
+        # 默认：Python 负责
+        return "python"
+
 
     def _dump_snapshot(self, run_id: str, repo_path: str = ".") -> str:
         """
@@ -220,6 +275,8 @@ class SystemException(Exception):
             "screenshot_path": ss_path,
             "last_interacted_selectors": self.last_interacted_selectors,
             "retryable": self.retryable,
+            # ── 修复目标 ──
+            "fix_target": self.fix_target,
         }
         snap_dir = os.path.join(repo_path, "crash_snapshots")
         os.makedirs(snap_dir, exist_ok=True)
