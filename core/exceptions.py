@@ -141,6 +141,7 @@ class SystemException(Exception):
         fix_target: str = "auto",
     ):
         super().__init__(message)
+        self.message = message  # 保存 message 属性，供 _infer_fix_target() 使用
         self.project = project
         self.traceback_str = traceback.format_exc()
         self.payload = payload or {}
@@ -152,14 +153,14 @@ class SystemException(Exception):
         self.intent = intent
         self.screenshot_path = screenshot_path
         self.last_interacted_selectors = last_interacted_selectors or []
-        # 异常编码体系
+        # 异常编码体系（必须在 _infer_fix_target() 之前设置）
         self.code = code or "LOGIC_DEFECT"
         self.exc_category = exc_category or "LOGIC_DEFECT"
         self.retryable = retryable
         self.need_snapshot = need_snapshot
         self.need_issue = need_issue
         self.run_context = run_context or {}
-        # 修复目标：自动推断或显式设置
+        # 修复目标：自动推断或显式设置（依赖 self.message 和 self.exc_category）
         if fix_target == "auto":
             self.fix_target = self._infer_fix_target()
         else:
