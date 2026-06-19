@@ -102,6 +102,9 @@ def send_execution_summary(
                 line = "**· 任务[%s]** → [%s/%s] %s" % (task_name, exc_cat, code, msg)
             if issue_url:
                 line += "\n  → [查看工单](%s)" % issue_url
+            fix_target = err.get("fix_target", "")
+            if fix_target:
+                line += "\n  → 修复目标: %s" % fix_target
             ai_summary = err.get("ai_summary", "")
             if ai_summary:
                 line += "\n  → AI摘要: %s" % ai_summary[:120]

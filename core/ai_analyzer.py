@@ -47,7 +47,11 @@ to classify the issue into one of:
   - ENVIRONMENT_ISSUE: runtime environment problem (path, config, permission)
   - LOGIC_DEFECT: Python script logic defect or bug
   - THIRD_PARTY_LIMIT: platform rate-limiting, CAPTCHA, or firewall
-Prefer suggesting fixes at the Python/data layer over selector changes.
+Use fix_target to respect the repair boundary:
+  - python: Python code, tests, payload validation, or data handling can be changed.
+  - rpa: ShadowBot/RPA flow, selector recapture, download/upload, or human operation must be checked.
+  - upstream: upstream data/source/system owner must be checked.
+Do not default to Python code changes when fix_target is rpa or upstream.
 Return ONLY valid JSON in this exact format (no markdown fences, no extra text):
 {
   "root_cause": "detailed explanation in Chinese or English",
@@ -187,6 +191,10 @@ def _build_prompt(snapshot: dict) -> str:
         parts.append("- Exception Code: %s" % snapshot["code"])
     if snapshot.get("exc_category"):
         parts.append("- Exception Category: %s" % snapshot["exc_category"])
+    if snapshot.get("fix_target"):
+        parts.append("- Fix Target: %s" % snapshot["fix_target"])
+        if snapshot["fix_target"] in ("rpa", "upstream"):
+            parts.append("- Boundary Note: Do not default to Python code changes; explain the non-Python handoff.")
     parts.append("")
 
     parts.append("## Technical Context")

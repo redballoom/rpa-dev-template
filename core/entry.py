@@ -74,6 +74,7 @@ def run_tasks(
                 "code": info.get("code", ""),
                 "exc_category": info.get("exc_category", ""),
                 "retryable": info.get("retryable", False),
+                "fix_target": info.get("fix_target", ""),
                 "issue_url": info.get("issue_url", ""),
                 # AI 增强字段
                 "ai_summary": ai.get("summary", ""),
@@ -107,6 +108,7 @@ def run_tasks(
                 "code": info.get("code", ""),
                 "exc_category": info.get("exc_category", ""),
                 "retryable": False,
+                "fix_target": info.get("fix_target", "python"),
                 "issue_url": info.get("issue_url", ""),
                 # 兜底异常无 AI 分析
                 "ai_summary": "",

@@ -129,3 +129,18 @@ def test_valid_categories_matches_system():
     """_VALID_CATEGORIES 必须与 SYSTEM_CATEGORIES 完全一致"""
     from core.exceptions import SYSTEM_CATEGORIES
     assert _VALID_CATEGORIES == set(SYSTEM_CATEGORIES.keys())
+
+
+def test_build_prompt_includes_fix_target():
+    """AI prompt 应包含修复目标，避免越界建议"""
+    from core.ai_analyzer import _build_prompt
+
+    prompt = _build_prompt({
+        "message": "Input file not found",
+        "fix_target": "rpa",
+        "exc_category": "ENVIRONMENT_ISSUE",
+        "payload": {},
+    })
+
+    assert "- Fix Target: rpa" in prompt
+    assert "Do not default to Python code changes" in prompt

@@ -4,7 +4,7 @@ tests/test_notifier.py — 通知模块测试
 覆盖：
   - 飞书 webhook 为空时不发无效请求
   - 生产分支判断可由配置列表控制
-  - 飞书错误卡片透出 AI 摘要
+  - 飞书错误卡片透出 AI 摘要和修复目标
 """
 import os
 import sys
@@ -59,6 +59,7 @@ def test_execution_summary_includes_ai_summary(monkeypatch):
             "exc_category": "DATA_QUALITY",
             "code": "DATA_INVALID",
             "ai_summary": "AI 判断为输入文件缺失",
+            "fix_target": "rpa",
             "confidence": 0.9,
         }],
     ) is True
@@ -68,3 +69,4 @@ def test_execution_summary_includes_ai_summary(monkeypatch):
         for element in posted[0]["card"]["elements"]
     )
     assert "AI 判断为输入文件缺失" in card_text
+    assert "修复目标: rpa" in card_text

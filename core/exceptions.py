@@ -317,6 +317,7 @@ class SystemException(Exception):
                 "last_interacted_selectors": self.last_interacted_selectors,
                 "code": self.code, "exc_category": self.exc_category,
                 "retryable": self.retryable,
+                "fix_target": self.fix_target,
                 "cause_type": self.error_type,
                 # 运行时上下文
                 "operator": self.run_context.get("operator", ""),
@@ -356,6 +357,7 @@ class SystemException(Exception):
                 "error_type": self.error_type, "error_file": self.error_file,
                 "code": self.code, "exc_category": self.exc_category,
                 "retryable": self.retryable,
+                "fix_target": self.fix_target,
                 "issue_success": issue_result.get("success", False),
                 "issue_url": issue_result.get("issue_url", ""),
                 "ai_analysis": ai_result,
@@ -366,6 +368,7 @@ class SystemException(Exception):
             "error_type": self.error_type, "error_file": self.error_file,
             "code": self.code, "exc_category": self.exc_category,
             "retryable": self.retryable,
+            "fix_target": self.fix_target,
             "issue_success": bool(issue_result), "issue_url": "",
             "ai_analysis": ai_result,
             "crash_snapshot_path": snapshot_path,

@@ -54,6 +54,8 @@
    - 代码缺陷、环境问题、依赖故障、规则缺失等使用 `SystemException`。此类异常会进入 `errors`，并中断后续任务。
    - 可重试的系统异常设置 `retryable=True`，通常返回 `retryable_error`。
    - 不可重试的系统异常通常返回 `pending_fix`，用于触发修复闭环。
+   - 新增或修改 `SystemException` 时必须判断 `fix_target`：`python` 表示 AI 可修 Python 代码，`rpa` 表示需要影刀流程/选择器/文件准备处理，`upstream` 表示需要上游数据源或第三方处理。
+   - 当异常原因明确不在 Python 侧时，必须显式传入 `fix_target="rpa"` 或 `fix_target="upstream"`，不要只依赖默认推断。
    - 输入文件缺失、入口崩溃、配置致命错误由 `runner.py` 返回 `fatal`。
    - `SystemException` 的 `rule_context` 和 `intent` 属于兼容字段，当前只会进入快照和 AI 分析上下文。新业务默认不要使用它们；业务数据仍应放在 `payload`。
 
@@ -142,6 +144,24 @@ raise SystemException(
     code="NETWORK_TIMEOUT",
     exc_category="DEPENDENCY_FAILURE",
     retryable=True,
+    fix_target="python",
+    run_context=context,
+)
+```
+
+非 Python 侧修复示例：
+
+```python
+raise SystemException(
+    message="输入文件不存在",
+    project=project,
+    payload=payload,
+    action="读取影刀下载文件",
+    expected="影刀已下载文件并传入正确路径",
+    actual="文件不存在",
+    code="INPUT_FILE_NOT_FOUND",
+    exc_category="ENVIRONMENT_ISSUE",
+    fix_target="rpa",
     run_context=context,
 )
 ```

@@ -140,6 +140,7 @@ def test_run_tasks_system_exception():
     assert errors[0]["ai_category"] == "LOGIC_DEFECT"
     assert errors[0]["ai_priority"] == "urgent"
     assert errors[0]["ai_severity"] == "high"
+    assert errors[0]["fix_target"] == "python"
     # 第3个任务不应执行
     task_ids = [r["task"]["id"] for r in result["data"]["results"]]
     assert 3 not in task_ids

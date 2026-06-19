@@ -56,16 +56,26 @@ AI 修复完成后，必须提供根因、修改摘要、验证命令、验证�
 | `runner_{run_id}.json` | 标准执行结果 |
 | `logs/run_{run_id}.log` | 运行日志 |
 | `crash_snapshots/crash_{run_id}.json` | 系统异常快照 |
+| `fix_target` | 修复目标：`python`、`rpa` 或 `upstream` |
 | 业务输入文件 | 位于 `data/input/` 或 payload 指定路径 |
+
+## 修复目标分支
+
+| `fix_target` | 含义 | 处理方式 |
+| --- | --- | --- |
+| `python` | Python 代码、payload 校验、数据处理或重试降级可修复 | AI 可进入代码修复流程 |
+| `rpa` | 影刀流程、下载上传、选择器、人工操作或路径准备问题 | 优先检查影刀流程，AI 不默认修改 Python |
+| `upstream` | 上游数据源、第三方系统或外部负责人问题 | 联系上游或等待外部恢复 |
 
 ## AI 修复步骤
 
 1. 阅读 `docs/SHADOWBOT_INPUT_CONTRACT.md` 和 `docs/RPA_PYTHON_BOUNDARY.md`。
 2. 读取 `input.json`，确认 `payload` 字段含义。
 3. 复现问题或构造最小复现样例。
-4. 修改 Python 业务代码，不默认修改影刀流程。
-5. 补充或更新测试、示例输入和文档。
-6. 给出验证方式和剩余风险。
+4. 读取 `runner_{run_id}.json.data.errors[].fix_target` 或 crash snapshot 中的 `fix_target`。
+5. 仅当 `fix_target=python` 时进入 Python 代码修复；`rpa` 或 `upstream` 应先说明非 Python 处理动作。
+6. 补充或更新测试、示例输入和文档。
+7. 给出验证方式和剩余风险。
 
 ## AI 修复前必须读取
 

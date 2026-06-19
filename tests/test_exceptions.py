@@ -8,6 +8,7 @@ tests/test_exceptions.py — 异常编码与分类测试
 """
 import sys
 import os
+import json
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -91,6 +92,47 @@ def test_system_exception_fields():
     assert info["code"] == "NETWORK_TIMEOUT"
     assert info["retryable"] == True
     assert info["issue_url"] == MOCK_ISSUE_URL
+    assert info["fix_target"] == "python"
+
+
+def test_system_exception_fix_target_inference():
+    """fix_target 根据异常分类和消息自动推断，也允许显式覆盖"""
+    cases = [
+        ({"message": "Input file not found", "exc_category": "ENVIRONMENT_ISSUE"}, "rpa"),
+        ({"message": "Element not found on page", "exc_category": "UI_CHANGED"}, "rpa"),
+        ({"message": "Permission denied", "exc_category": "ENVIRONMENT_ISSUE"}, "python"),
+        ({"message": "Rate limited by platform", "exc_category": "THIRD_PARTY_LIMIT"}, "python"),
+        ({"message": "Network timeout", "exc_category": "DEPENDENCY_FAILURE"}, "python"),
+        ({"message": "Rule missing", "exc_category": "RULE_MISSING"}, "python"),
+        ({"message": "Bad data", "exc_category": "DATA_QUALITY"}, "python"),
+        ({"message": "Division by zero", "exc_category": "LOGIC_DEFECT"}, "python"),
+    ]
+    for kwargs, expected in cases:
+        assert SystemException(**kwargs).fix_target == expected
+
+    exc = SystemException(
+        message="File not found",
+        exc_category="ENVIRONMENT_ISSUE",
+        fix_target="upstream",
+    )
+    assert exc.fix_target == "upstream"
+
+
+@patch("core.ai_analyzer.analyze_crash", _mock_analyze)
+@patch("core.exceptions.create_linear_issue", _mock_create_issue)
+def test_system_exception_fix_target_snapshot_and_notify(tmp_path):
+    """fix_target 同时进入 crash snapshot 和 notify 返回值"""
+    exc = SystemException(
+        message="Input file not found",
+        exc_category="ENVIRONMENT_ISSUE",
+    )
+    info = exc.notify(extra_payload={"run_id": "fix-target"}, repo_path=str(tmp_path))
+
+    assert info["fix_target"] == "rpa"
+    snapshot_path = tmp_path / "crash_snapshots" / "crash_fix-target.json"
+    with open(snapshot_path, "r", encoding="utf-8") as f:
+        snapshot = json.load(f)
+    assert snapshot["fix_target"] == "rpa"
 
 
 @patch("core.ai_analyzer.analyze_crash", _mock_analyze)
