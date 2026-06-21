@@ -76,6 +76,17 @@ def test_determine_status_retryable_error():
     assert "timeout" in msg
 
 
+def test_determine_status_mixed_errors_prefers_pending_fix():
+    """多个系统异常混合时，不可重试错误优先进入 pending_fix"""
+    errors = [
+        {"retryable": True, "message": "timeout"},
+        {"retryable": False, "message": "logic bug"},
+    ]
+    status, msg = _determine_status(errors, [], 0, 2)
+    assert status == "pending_fix"
+    assert "logic bug" in msg
+
+
 def test_determine_status_pending_fix():
     """不可重试系统异常 → pending_fix"""
     errors = [{"retryable": False, "message": "crash"}]
@@ -137,6 +148,38 @@ def test_run_tasks_system_exception():
     # 第3个任务不应执行
     task_ids = [r["task"]["id"] for r in result["data"]["results"]]
     assert 3 not in task_ids
+
+
+@with_mocks
+def test_run_tasks_system_exception_continue_when_fail_fast_false():
+    """context.fail_fast=false 时，独立批任务可在系统异常后继续"""
+    result = run_tasks(
+        run_id="entry-003-continue", project="测试",
+        tasks=[
+            {"id": 1, "name": "正常任务", "type": "template_demo"},
+            {"id": 0, "name": "触发崩溃", "type": "template_demo"},
+            {"id": 3, "name": "继续执行", "type": "template_demo"},
+        ],
+        context={"fail_fast": False},
+    )
+    assert result["status"] == "pending_fix"
+    task_ids = [r["task"]["id"] for r in result["data"]["results"]]
+    assert task_ids == [1, 0, 3]
+
+
+@with_mocks
+def test_run_tasks_task_continue_on_error():
+    """单个任务声明 continue_on_error 时，默认 fail_fast 下也可继续"""
+    result = run_tasks(
+        run_id="entry-003-task-continue", project="测试",
+        tasks=[
+            {"id": 0, "name": "触发崩溃", "type": "template_demo", "continue_on_error": True},
+            {"id": 3, "name": "继续执行", "type": "template_demo"},
+        ],
+    )
+    assert result["status"] == "pending_fix"
+    task_ids = [r["task"]["id"] for r in result["data"]["results"]]
+    assert task_ids == [0, 3]
 
 
 @with_mocks

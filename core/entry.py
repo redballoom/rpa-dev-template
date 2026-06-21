@@ -27,6 +27,7 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
         context = {}
     context.setdefault("repo_path", repo_path)
     context.setdefault("project", project)
+    fail_fast = _as_bool(context.get("fail_fast", True))
 
     logger = RunLogger(run_id, repo_path)
     logger.start(project, len(tasks))
@@ -72,7 +73,8 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
             results.append({"task": task, "status": "error", "reason": str(e)})
             logger.task_end(task, "error", str(e))
             logger.exception(info)
-            break  # SystemException 中断后续任务
+            if fail_fast and not _as_bool(task.get("continue_on_error", False)):
+                break  # 默认保持系统异常中断；独立批任务可通过 context.fail_fast=false 继续。
         except Exception as e:
             # 兜底：未捕获异常 → 包装为 SystemException
             se = SystemException(
@@ -98,7 +100,8 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
             })
             results.append({"task": task, "status": "error", "reason": str(e)})
             logger.task_end(task, "error (uncaught)", str(e))
-            break
+            if fail_fast and not _as_bool(task.get("continue_on_error", False)):
+                break
 
     success_count = sum(1 for r in results if r["status"] == "ok")
     total = len(tasks)
@@ -133,6 +136,15 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
     }
 
 
+def _as_bool(value):
+    """兼容影刀传入 bool 或字符串形式的开关。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in ("0", "false", "no", "off", "")
+    return bool(value)
+
+
 def _determine_status(errors, warnings, success_count, total):
     """根据异常情况判定状态码和消息
 
@@ -143,11 +155,12 @@ def _determine_status(errors, warnings, success_count, total):
       failed:  保留给 runner 级别的崩溃（execute() 中使用），不在 run_tasks 中产生
     """
     if errors:
-        has_retryable = any(e.get("retryable") for e in errors)
-        if has_retryable:
+        has_non_retryable = any(not e.get("retryable") for e in errors)
+        if not has_non_retryable:
             return "retryable_error", "可重试异常: %s" % errors[0]["message"]
         # 非可重试系统异常 → pending_fix（语义统一：待修复）
-        return "pending_fix", "系统异常(待修复): %s" % errors[0]["message"]
+        first_non_retryable = next((e for e in errors if not e.get("retryable")), errors[0])
+        return "pending_fix", "系统异常(待修复): %s" % first_non_retryable["message"]
 
     all_ok = success_count == total
     if all_ok:

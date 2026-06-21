@@ -10,6 +10,8 @@ runner.py 读取输入 → 调用 core.entry.run_tasks() → 输出 runner_{run_
 """
 import sys, os, json, argparse, traceback
 
+LOCK_WAIT_SECONDS = 5
+
 try:
     if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
         import io
@@ -124,7 +126,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
 
     # ── 并发锁 ──────────────────────────────────────────────
     lock = _FileLock(os.path.join(repo_path, ".runner.lock"))
-    if not lock.try_acquire(timeout=0):
+    if not lock.try_acquire(timeout=LOCK_WAIT_SECONDS):
         rd = {"status": "locked", "message": "Locked: %s" % repo_path,
               "data": {"run_id": run_id, "retryable": True,
                        "log_path": "", "crash_snapshot_dir": "",
@@ -151,10 +153,10 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
                 with open(sf, "w", encoding="utf-8") as f:
                     json.dump(rd, f, ensure_ascii=False, indent=2)
                 return sf
-            run_id = input_data.get("run_id", run_id)
             project = input_data.get("project", project)
             tasks = input_data.get("tasks", [])
             context = input_data.get("context", {})
+            context.setdefault("input_file", input_file)
         if work_dir:
             context.setdefault("work_dir", work_dir)
 

@@ -4,11 +4,13 @@
 
 ## 输入契约
 
-- `input.json` 位于项目根目录。
+- 推荐输入文件命名为 `input_{run_id}.json`，并位于项目根目录。
+- 固定 `input.json` 仅允许单实例串行流程使用。
 - 业务差异集中在 `payload`。
 - 业务输入文件位于 `data/input/` 或 `payload` 明确指定的位置。
-- `run_id` 不强制写入 `input.json`，可由影刀或 BAT 通过命令行传入。
-- 未传 `input_file` 时，`runner.py` 不读取 `input.json`。
+- `run_id` 不写入输入文件，由影刀或 BAT 通过命令行传入。
+- 未传 `input_file` 时，`runner.py` 不读取输入文件。
+- `context.env=prod` 时应按生产环境处理；`context.env=test/dev/local/staging` 时不创建生产工单。
 
 ## 输出契约
 
@@ -21,7 +23,7 @@
 ## 代码
 
 - `runner.py` 支持 `--run_id`、`--repo_path`、`--input_file`、`--work_dir`、`--project`。
-- `input.json` 使用标准 `tasks` 数组格式，`type` 决定路由。
+- 输入文件使用标准 `tasks` 数组格式，`type` 决定路由。
 - 业务代码不硬编码影刀临时路径。
 - 密钥、webhook、账号信息不写死在模板代码中。
 

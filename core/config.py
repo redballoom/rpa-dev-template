@@ -74,7 +74,7 @@ LINEAR_ASSIGNEE_ID = _linear_cfg.get("assignee_id", "")
 _ai_cfg = _cfg.get("ai", {})
 AI_ENABLED = _ai_cfg.get("enabled", False)
 AI_API_KEY = _ai_cfg.get("api_key", "")
-AI_MODEL = _ai_cfg.get("model", "ep-20260509143138-njpgt")
+AI_MODEL = _ai_cfg.get("model", "")
 AI_TIMEOUT = _ai_cfg.get("timeout", 15)
 
 # ── 配置校验 ────────────────────────────────────────────────
@@ -113,6 +113,8 @@ def validate_config() -> dict:
     # AI 启用但缺 API Key
     if AI_ENABLED and not AI_API_KEY:
         warnings.append("AI 分析已启用但 API Key 未配置 (AI_API_KEY)")
+    if AI_ENABLED and not AI_MODEL:
+        warnings.append("AI 分析已启用但模型未配置 (AI_MODEL)")
 
     is_fatal = len(missing) > 0
     parts = []

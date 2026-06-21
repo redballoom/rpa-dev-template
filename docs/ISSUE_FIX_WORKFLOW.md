@@ -16,7 +16,7 @@
 
 修复前尽量收集：
 
-- `input.json`
+- 本次运行的输入文件，例如 `input_{run_id}.json`
 - `runner_{run_id}.json`
 - `logs/run_{run_id}.log`
 - `crash_snapshots/crash_{run_id}.json`
@@ -26,7 +26,7 @@
 ## AI 修复步骤
 
 1. 阅读 `docs/SHADOWBOT_INPUT_CONTRACT.md` 和 `docs/RPA_PYTHON_BOUNDARY.md`。
-2. 读取 `input.json`，确认 `payload` 字段含义。
+2. 读取本次运行的输入文件，确认 `payload` 字段含义。
 3. 复现问题或构造最小复现样例。
 4. 修改 Python 业务代码，不默认修改影刀流程。
 5. 补充或更新测试、示例输入和文档。

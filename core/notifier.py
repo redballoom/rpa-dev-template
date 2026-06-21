@@ -309,10 +309,13 @@ def create_linear_issue(
     run_context: Optional[dict] = None,
 ) -> Any:
     """创建 Linear 工单，支持 AI 分析增强 + 指派人 + 标签"""
-    # 测试分支不创建工单
-    if repo_path and not _is_production_env(repo_path):
+    rc = run_context or {}
+
+    # 测试环境不创建工单。优先使用影刀显式传入的 context.env，Git 分支仅作兜底。
+    if repo_path and not _is_production_env(repo_path, rc):
         branch = _get_current_branch(repo_path)
-        print("[notifier] INFO: branch [%s] is test env, skip Linear issue" % branch)
+        env = rc.get("env", "")
+        print("[notifier] INFO: env [%s], branch [%s] is test env, skip Linear issue" % (env or "unset", branch))
         return {"success": True, "issue_url": ""}
 
     project_id = _ensure_linear_project()
@@ -337,7 +340,6 @@ def create_linear_issue(
     parts = []
 
     # 0. 运行来源
-    rc = run_context or {}
     if rc.get("operator") or rc.get("source"):
         parts.append("## 运行来源")
         src_lines = ["| 项目 | 内容 |", "|------|------|"]
@@ -509,5 +511,13 @@ def _get_current_commit(repo_path: str = ".") -> str:
         return "unknown"
 
 
-def _is_production_env(repo_path: str = ".") -> bool:
+def _is_production_env(repo_path: str = ".", run_context: Optional[dict] = None) -> bool:
+    """判断是否生产环境：context.env 优先，Git 分支兜底。"""
+    env = ""
+    if run_context:
+        env = str(run_context.get("env", "")).strip().lower()
+    if env in ("prod", "production"):
+        return True
+    if env in ("test", "testing", "dev", "development", "local", "staging"):
+        return False
     return _get_current_branch(repo_path) == "main"

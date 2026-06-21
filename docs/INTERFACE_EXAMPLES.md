@@ -4,6 +4,8 @@
 
 ## 输入示例：文件汇总
 
+推荐文件名：`input_{run_id}.json`。
+
 ```json
 {
   "project": "文件汇总项目",
@@ -28,7 +30,7 @@
 }
 ```
 
-## 输入示例：无 input.json
+## 输入示例：无 input_file
 
 影刀可以不传 `input_file`。此时 `runner.py` 不读取输入文件，业务代码使用默认逻辑：
 
@@ -36,10 +38,10 @@
 python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo
 ```
 
-## 输入示例：传 input.json
+## 输入示例：传 input_file
 
 ```bat
-python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo --work_dir C:\CodePJ\Demo\data --input_file C:\CodePJ\Demo\input.json
+python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo --work_dir C:\CodePJ\Demo\data --input_file C:\CodePJ\Demo\input_rpa_001.json
 ```
 
 ## 标准输出

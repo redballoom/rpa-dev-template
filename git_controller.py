@@ -15,6 +15,8 @@ git_controller.py — Git 部署辅助工具 (CLI 模式)
 
 注意：
   - 任务执行时（runner.py）不会自动调用此模块。
+  - 本工具只用于部署期，禁止在影刀生产任务运行中调用。
+  - 切换分支前要求工作区干净；不会自动 stash 用户改动。
   - 是否使用本工具并不重要，关键是先把项目仓库准备好，再进入运行期。
 """
 
@@ -76,7 +78,16 @@ def switch_git_env(is_test: bool, repo_path: str, git_url: str = "") -> dict:
     # -- 情况 C: 仓库已存在 -> 常规切换
     try:
         print(f"[系统调度] 准备切换至分支: {target_branch}")
-        subprocess.run(["git", "-C", repo_path, "stash", "--include-untracked"], capture_output=True)
+        dirty = subprocess.run(
+            ["git", "-C", repo_path, "status", "--porcelain"],
+            capture_output=True, text=True, check=True
+        )
+        if dirty.stdout.strip():
+            return {
+                "status": "error",
+                "msg": "工作区存在未提交改动，已停止切换分支；请人工提交、清理或备份后重试",
+                "dirty": dirty.stdout.strip().splitlines(),
+            }
         subprocess.run(["git", "-C", repo_path, "fetch", "--all", "--prune"], capture_output=True)
 
         checkout_res = subprocess.run(["git", "-C", repo_path, "checkout", target_branch], capture_output=True, text=True)

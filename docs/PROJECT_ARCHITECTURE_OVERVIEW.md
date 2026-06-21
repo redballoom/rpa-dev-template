@@ -8,7 +8,7 @@
   run.bat
   project.json
   project.template.json
-  input.json
+  input_{run_id}.json
   core/
     entry.py
     config.py
@@ -26,7 +26,7 @@
   tests/
 ```
 
-`input.json` 是影刀生成的单次业务输入。  
+`input_{run_id}.json` 是推荐的单次业务输入命名，用于并发隔离。固定 `input.json` 仅作为单实例串行兼容写法。
 `data/` 是业务文件目录。  
 `runner_{run_id}.json` 默认输出在项目根目录。
 
@@ -34,9 +34,9 @@
 
 ```text
 影刀准备业务数据
-  -> 写 input.json
+  -> 写 input_{run_id}.json
   -> 调用 run.bat 或 runner.py
-  -> runner.py 读取 input.json
+  -> runner.py 读取 input_file
   -> core.entry.run_tasks() 按 tasks[].type 路由
   -> 写业务输出到 data/output/
   -> 写 runner_{run_id}.json
@@ -48,7 +48,7 @@
 传入 input：
 
 ```bat
-run.bat rpa_001 C:\CodePJ\Demo\data C:\CodePJ\Demo\input.json
+run.bat rpa_001 C:\CodePJ\Demo\data C:\CodePJ\Demo\input_rpa_001.json
 ```
 
 不传 input：

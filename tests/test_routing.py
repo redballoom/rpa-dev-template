@@ -227,7 +227,7 @@ def test_input_file_with_utf8_bom():
     repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     input_path = os.path.join(repo_path, "input_route_bom.json")
     payload = {
-        "run_id": "route-bom-001",
+        "run_id": "route-bom-from-input-should-be-ignored",
         "project": "BOM测试",
         "tasks": [{"id": 1, "name": "正常任务", "type": "template_demo"}],
         "context": {"operator": "pytest", "env": "test", "source": "bom"},

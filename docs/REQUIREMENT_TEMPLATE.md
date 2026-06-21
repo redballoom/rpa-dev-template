@@ -11,7 +11,7 @@
 
 ## 输入
 
-`input.json` 示例：
+`input_{run_id}.json` 示例：
 
 ```json
 {
@@ -38,6 +38,7 @@
 - `payload` 中每个字段的含义：
 - `data/input/` 中会有哪些文件：
 - 文件格式、字段名、编码、分隔符：
+- 是否需要设置 `context.fail_fast=false` 以支持独立批任务继续执行：
 
 ## 输出
 
