@@ -153,6 +153,25 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 
 不要跳过第 2 和第 3 步。这个模板的核心是契约优先：先确定影刀给什么、Python 出什么，再写业务代码。
 
+## Skill 在哪个环节使用
+
+配套 Skills 维护在独立远程仓库：`https://github.com/redballoom/rpa-dev-template-skills`。
+
+它们不是业务代码，而是帮助 AI 按正确顺序使用模板。初始化 Skill 在项目创建前使用；业务接入和修复 Skill 在项目创建后配合本模板文档使用。
+
+| 阶段 | 使用 Skill | 目标 |
+| --- | --- | --- |
+| 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，校验交接文件 |
+| 新业务接入 | `rpa-contract-business` | 先拟定 `tasks[].type`、`payload`、输出和异常语义，用户确认后再写代码 |
+| 运行失败修复 | `rpa-fix-loop` | 读取 `runner_{run_id}.json`、日志和快照，判断边界后修复并测试 |
+
+理想配合方式：
+
+- 人负责提供业务目标、确认契约、决定是否上线或合并。
+- Skill 负责约束 AI 的工作顺序。
+- AI 负责实现、测试、解释风险。
+- 模板负责稳定输入输出、异常语义和运行产物。
+
 ## 最容易犯的小错误
 
 - 把 `run_id` 写进输入文件，并期望它覆盖命令行参数。

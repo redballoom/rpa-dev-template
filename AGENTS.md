@@ -22,6 +22,7 @@
    - `docs/PROJECT_ARCHITECTURE_OVERVIEW.md`
    - `docs/examples/input_*.json`
    - 如是故障修复，再读 `docs/ISSUE_FIX_WORKFLOW.md`
+   - 如需要工作流辅助，使用外部 Skill 仓库 `https://github.com/redballoom/rpa-dev-template-skills`
    - 注意：`calc_summary` 和 `template_demo` 是模板内置可运行示例；其他业务型示例用于说明 payload 形态，接入前必须实现对应 handler。
 
 2. 明确输入输出

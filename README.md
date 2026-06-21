@@ -64,6 +64,7 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
+| [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复 |
 
 ## 推荐协作方式
 
@@ -73,6 +74,16 @@ run.bat {run_id} {work_dir} {input_file}
 4. Python 输出 `runner_{run_id}.json`。
 5. 影刀只消费 `runner_{run_id}.json` 的 `status`、`message` 和 `data`，不直接解析 Python 堆栈。
 6. AI 后续只在 Code 项目内修改 Python 业务代码、测试和文档，默认不改影刀 UI 流程。
+
+## 配套 Skills
+
+配套 Skills 维护在独立远程仓库，便于在任意电脑、任意项目初始化前安装使用：
+
+- `rpa-project-bootstrap`：从远程模板初始化新项目。
+- `rpa-contract-business`：新业务需求进入时，先做输入输出契约，再实现 handler。
+- `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
+
+远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
 
 ## 状态码
 
