@@ -3,8 +3,8 @@
 data/
 logs/*.log
 runner_*.json
-input.json
-input_*.json
+/input.json
+/input_*.json
 project.json
 
 # ── Python 缓存 ──────────────────────────────────────────────

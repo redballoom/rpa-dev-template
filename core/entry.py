@@ -249,7 +249,7 @@ def _process_calc_summary(task, context):
         raise BusinessException(
             "payload.numbers is empty", project=context.get("project", "RPA"),
             context={"payload": payload}, code="DATA_EMPTY",
-            suggested_action="请在 input.json 的 payload.numbers 中传入数字列表",
+            suggested_action="请在输入文件的 payload.numbers 中传入数字列表",
         )
 
     try:
