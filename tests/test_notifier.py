@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import core.notifier as notifier
 from core.notifier import _is_production_env
 
 
@@ -32,3 +33,37 @@ def test_is_production_env_falls_back_to_branch():
         assert _is_production_env(".", {}) is True
     with patch("core.notifier._get_current_branch", return_value="feature/demo"):
         assert _is_production_env(".", {}) is False
+
+
+def test_feishu_post_skips_when_webhook_missing():
+    """飞书 webhook 未配置时应明确跳过，不发起网络请求"""
+    original = notifier.FEISHU_WEBHOOK
+    try:
+        notifier.FEISHU_WEBHOOK = ""
+        with patch("core.notifier.requests.post") as mock_post:
+            assert notifier._feishu_post({"msg_type": "text"}) is True
+            mock_post.assert_not_called()
+    finally:
+        notifier.FEISHU_WEBHOOK = original
+
+
+def test_linear_issue_skips_when_config_missing_in_prod():
+    """生产环境但 Linear 关键配置缺失时明确跳过，避免空配置网络请求"""
+    original_key = notifier.LINEAR_API_KEY
+    original_team = notifier.LINEAR_TEAM_ID
+    try:
+        notifier.LINEAR_API_KEY = ""
+        notifier.LINEAR_TEAM_ID = ""
+        with patch("core.notifier.requests.post") as mock_post:
+            result = notifier.create_linear_issue(
+                error_msg="boom",
+                trace="",
+                payload_data={},
+                repo_path=".",
+                run_context={"env": "prod"},
+            )
+            assert result == {"success": False, "issue_url": ""}
+            mock_post.assert_not_called()
+    finally:
+        notifier.LINEAR_API_KEY = original_key
+        notifier.LINEAR_TEAM_ID = original_team

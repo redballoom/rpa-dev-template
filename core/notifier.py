@@ -141,6 +141,9 @@ def send_execution_summary(
 
 def _feishu_post(data: dict) -> bool:
     """飞书 Webhook POST 封装"""
+    if not FEISHU_WEBHOOK:
+        print("[notifier] INFO: feishu_webhook not configured, skip Feishu notification")
+        return True
     try:
         r = requests.post(FEISHU_WEBHOOK, json=data, timeout=10)
         result = r.json()
@@ -317,6 +320,10 @@ def create_linear_issue(
         env = rc.get("env", "")
         print("[notifier] INFO: env [%s], branch [%s] is test env, skip Linear issue" % (env or "unset", branch))
         return {"success": True, "issue_url": ""}
+
+    if not LINEAR_API_KEY or not LINEAR_TEAM_ID:
+        print("[notifier] WARN: Linear api_key/team_id not configured, skip issue creation")
+        return {"success": False, "issue_url": ""}
 
     project_id = _ensure_linear_project()
 

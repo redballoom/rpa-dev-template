@@ -6,7 +6,7 @@
 
 这是影刀 RPA 调度的 Python Code 项目模板。
 
-- 影刀负责页面操作、登录、下载、上传、人工确认、生成 `input.json`、调用 `run.bat` 或 `runner.py`。
+- 影刀负责页面操作、登录、下载、上传、人工确认、生成本次运行独立的输入文件、调用 `run.bat` 或 `runner.py`。
 - Python 负责读取结构化输入、处理业务数据、写业务输出、记录日志、分类异常、输出 `runner_{run_id}.json`。
 - AI 负责在本 Code 项目内实现和维护 Python 业务逻辑、测试、示例输入和文档。
 
@@ -16,6 +16,7 @@
 
 1. 先读契约文档
    - `README.md`
+   - `docs/OPERATION_GUIDE.md`
    - `docs/SHADOWBOT_INPUT_CONTRACT.md`
    - `docs/RPA_PYTHON_BOUNDARY.md`
    - `docs/PROJECT_ARCHITECTURE_OVERVIEW.md`
@@ -24,12 +25,15 @@
    - 注意：`calc_summary` 和 `template_demo` 是模板内置可运行示例；其他业务型示例用于说明 payload 形态，接入前必须实现对应 handler。
 
 2. 明确输入输出
-   - 确认 `input.json` 的 `tasks[]` 结构。
+   - 确认输入文件的 `tasks[]` 结构。推荐使用 `input_{run_id}.json`，固定 `input.json` 仅适合单实例串行运行。
+   - 确认 `run_id` 由影刀或 BAT 通过命令行传入，不写入输入文件；即使输入文件中出现顶层 `run_id`，Python 也以命令行参数为准。
    - 确认新增或修改的 `tasks[].type` 路由键。
    - 确认 `payload` 每个字段的业务含义、必填性、默认值和路径规则。
+   - 确认 `context.env` 是否明确为 `test` 或 `prod`，生产工单判断优先使用该字段。
+   - 确认是否需要 `context.fail_fast=false` 或 `tasks[].continue_on_error=true` 支持独立批任务继续执行。
    - 确认业务输入文件是否位于 `data/input/`，业务输出是否写到 `data/output/`。
    - 确认影刀只需要读取 `runner_{run_id}.json`，还是还需要读取某个业务输出文件。
-   - 如果用户只给业务目标、没有给完整 `input.json`，AI 应先设计 `tasks[].type` 和 `payload` 示例，再按该契约实现 handler。
+   - 如果用户只给业务目标、没有给完整输入契约，AI 应先设计 `tasks[].type` 和 `payload` 示例，再按该契约实现 handler。
 
 3. 设计路由和 handler
    - 小需求可以直接在 `core/entry.py` 增加 `_process_xxx()` 并在 `_process_single_task()` 中按 `task.type` 路由。
@@ -48,7 +52,8 @@
 
 5. 使用统一异常语义
    - 可接受的业务问题使用 `BusinessException`，例如空数据、单条记录不合法、业务规则阻断。此类异常会进入 `warnings`，通常最终状态为 `warning`。
-   - 代码缺陷、环境问题、依赖故障、规则缺失等使用 `SystemException`。此类异常会进入 `errors`，并中断后续任务。
+   - 代码缺陷、环境问题、依赖故障、规则缺失等使用 `SystemException`。此类异常会进入 `errors`，默认中断后续任务。
+   - 独立批任务可通过 `context.fail_fast=false` 或单任务 `continue_on_error=true` 在系统异常后继续执行；有依赖关系的任务不要开启。
    - 可重试的系统异常设置 `retryable=True`，通常返回 `retryable_error`。
    - 不可重试的系统异常通常返回 `pending_fix`，用于触发修复闭环。
    - 输入文件缺失、入口崩溃、配置致命错误由 `runner.py` 返回 `fatal`。
@@ -80,7 +85,7 @@
 - 不修改 `runner.py` 的输出协议，除非需求明确要求且同步更新测试和文档。
 - 不修改 `run.bat` 的参数契约，除非影刀调用方式同步变化。
 - 新增 `tasks[].type` 时必须同步实现 handler、示例输入和测试；不要只更新文档。
-- 不提交运行产物，例如 `runner_*.json`、`logs/`、`crash_snapshots/`、`data/`。
+- 不提交运行产物，例如 `runner_*.json`、`input*.json`、`logs/`、`crash_snapshots/`、`data/`。
 - 不提交或泄露 `project.json` 中的真实密钥、webhook、Linear 配置。
 
 ## 推荐实现模板
@@ -122,7 +127,7 @@ raise BusinessException(
     project=project,
     context={"payload": payload},
     code="DATA_EMPTY",
-    suggested_action="请在 input.json 的 payload.xxx 中传入必要参数",
+    suggested_action="请在输入文件的 payload.xxx 中传入必要参数",
 )
 ```
 
@@ -148,7 +153,7 @@ raise SystemException(
 完成业务实现前，不要只停留在代码修改。交付时至少说明：
 
 - 新增或修改了哪些任务类型。
-- `input.json` 的示例结构。
+- 输入文件的示例结构，推荐按 `input_{run_id}.json` 命名。
 - 业务输出文件路径和结果摘要。
 - `runner_{run_id}.json.status` 的预期值。
 - 已执行的测试命令和结果。
