@@ -180,6 +180,7 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 - `.rpa_ai/workflow.template.json`：AI 工作区 Gate、模板版本、所需 Skill 和 handoff 位置。
 - `schemas/`：输入、工作流和 handoff 的 Schema。
 - `tools/doctor.py`：检查模板底座是否完整。
+- `tools/handoff.py`：生成、校验、推进和归档当前 handoff。
 
 新项目初始化后、模板升级后、或把项目迁移到另一台电脑后，先运行：
 
@@ -190,6 +191,15 @@ python tools\doctor.py
 通过后再进入业务契约阶段。若失败，优先修复自检报告中的必需文件、版本对齐、JSON 结构、忽略规则或本机绝对路径问题。
 
 AI 在跨会话接力时，应把阶段交接内容整理成符合 `schemas/handoff.schema.json` 的 handoff，而不是只依赖聊天上下文。推荐至少包含：当前工作区、状态、关键决策、产物、验证、风险、下一个工作区、是否需要用户确认。
+
+常用命令：
+
+```bat
+python tools\handoff.py init --workspace contract_review
+python tools\handoff.py validate
+python tools\handoff.py advance
+python tools\handoff.py archive --label reviewed
+```
 
 ## 最容易犯的小错误
 

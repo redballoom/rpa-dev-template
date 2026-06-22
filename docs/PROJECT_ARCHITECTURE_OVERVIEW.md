@@ -31,6 +31,7 @@
     workflow.template.json
   tools/
     doctor.py
+    handoff.py
   tests/
 ```
 
@@ -38,7 +39,7 @@
 `data/` 是业务文件目录。  
 `runner_{run_id}.json` 默认输出在项目根目录。
 
-`.rpa_ai/workflow.template.json` 负责描述 AI 协作 Gate 和 Skill 兼容关系。`schemas/` 负责给输入、工作流和 handoff 提供机器可读约束。`tools/doctor.py` 用于初始化、迁移和升级后的模板自检。
+`.rpa_ai/workflow.template.json` 负责描述 AI 协作 Gate 和 Skill 兼容关系。`schemas/` 负责给输入、工作流和 handoff 提供机器可读约束。`tools/doctor.py` 用于初始化、迁移和升级后的模板自检。`tools/handoff.py` 用于维护 `.rpa_ai/handoff/current.json` 和历史归档。
 
 ## 执行流程
 

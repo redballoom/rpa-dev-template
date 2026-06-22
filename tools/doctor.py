@@ -23,6 +23,7 @@ REQUIRED_FILES = [
     "schemas/workflow.schema.json",
     "schemas/handoff.schema.json",
     "schemas/input.schema.json",
+    "tools/handoff.py",
 ]
 
 JSON_FILES = [
@@ -159,7 +160,7 @@ def _check_docs_link_workflow(checks):
     except OSError as exc:
         _add_check(checks, "workflow_docs_linked", False, str(exc))
         return
-    needed = [".rpa_ai/workflow.template.json", "tools/doctor.py", "schemas/"]
+    needed = [".rpa_ai/workflow.template.json", "tools/doctor.py", "tools/handoff.py", "schemas/"]
     missing = [item for item in needed if item not in readme + agents]
     _add_check(
         checks,

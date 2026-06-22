@@ -22,7 +22,7 @@
    - `docs/PROJECT_ARCHITECTURE_OVERVIEW.md`
    - `docs/examples/input_*.json`
    - 如是故障修复，再读 `docs/ISSUE_FIX_WORKFLOW.md`
-   - 如是初始化验收、跨机器迁移或升级检查，再读 `.rpa_ai/workflow.template.json`、`schemas/`，并运行 `python tools/doctor.py`
+   - 如是初始化验收、跨机器迁移、升级检查或工作区接力，再读 `.rpa_ai/workflow.template.json`、`schemas/`，并运行 `python tools/doctor.py`
    - 如需要工作流辅助，使用外部 Skill 仓库 `https://github.com/redballoom/rpa-dev-template-skills`
    - 注意：`calc_summary` 和 `template_demo` 是模板内置可运行示例；其他业务型示例用于说明 payload 形态，接入前必须实现对应 handler。
 
@@ -78,6 +78,7 @@
    - 优先在 `tests/` 中增加小而明确的单元测试。
    - 涉及 runner 输入输出时，增加端到端测试或手动运行示例。
    - 涉及模板迁移、版本、Schema、工作区交接或初始化能力时，必须运行 `python tools/doctor.py`。
+   - 涉及 handoff 生命周期时，必须运行 `python tools\handoff.py validate` 或对应单测。
    - 可运行时执行 `python -m pytest tests/ -v`。
    - 不能运行测试时，必须说明原因和剩余风险。
 
@@ -93,6 +94,15 @@
 - `retrospective`：复盘沉淀。
 
 不同 AI 或不同会话接力时，应优先产出符合 `schemas/handoff.schema.json` 的 handoff 内容，至少说明当前工作区、状态、决策、产物、验证、风险和下一个工作区。不要只用自然语言把上下文留在聊天记录里。
+
+推荐使用工具维护当前交接文件：
+
+```bat
+python tools\handoff.py init --workspace contract_review
+python tools\handoff.py validate
+python tools\handoff.py advance
+python tools\handoff.py archive --label reviewed
+```
 
 推荐 handoff 形态：
 
