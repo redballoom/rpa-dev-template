@@ -64,6 +64,9 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
+| [.rpa_ai/workflow.template.json](.rpa_ai/workflow.template.json) | AI 工作区 Gate、模板版本和 Skill 兼容声明 |
+| [schemas/](schemas/) | 输入、工作流和 handoff 的机器可读 Schema |
+| [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
 | [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复 |
 
 ## 推荐协作方式
@@ -84,6 +87,25 @@ run.bat {run_id} {work_dir} {input_file}
 - `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
 
 远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
+
+## 可迁移与升级底座
+
+模板包含一组机器可读的协作文件，用于让不同电脑、不同 Agent 和不同项目之间保持一致。
+
+- `VERSION`：当前模板版本。
+- `.rpa_ai/workflow.template.json`：声明工作区 Gate、模板版本、所需 Skill 和 handoff 位置。
+- `schemas/input.schema.json`：约束影刀输入文件的基本结构。
+- `schemas/handoff.schema.json`：约束 AI 工作区之间的交接产物。
+- `schemas/workflow.schema.json`：约束工作流声明本身。
+- `tools/doctor.py`：初始化或升级后运行，检查必需文件、JSON、版本对齐、运行产物忽略规则和本机路径污染。
+
+推荐在新项目初始化后执行：
+
+```bat
+python tools\doctor.py
+```
+
+如果 `doctor` 返回 `failed`，先修复底座问题，再进入业务契约和 handler 开发。
 
 ## 状态码
 

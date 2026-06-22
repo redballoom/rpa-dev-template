@@ -23,12 +23,22 @@
   logs/
   crash_snapshots/
   docs/
+  schemas/
+    input.schema.json
+    workflow.schema.json
+    handoff.schema.json
+  .rpa_ai/
+    workflow.template.json
+  tools/
+    doctor.py
   tests/
 ```
 
 `input_{run_id}.json` 是推荐的单次业务输入命名，用于并发隔离。固定 `input.json` 仅作为单实例串行兼容写法。
 `data/` 是业务文件目录。  
 `runner_{run_id}.json` 默认输出在项目根目录。
+
+`.rpa_ai/workflow.template.json` 负责描述 AI 协作 Gate 和 Skill 兼容关系。`schemas/` 负责给输入、工作流和 handoff 提供机器可读约束。`tools/doctor.py` 用于初始化、迁移和升级后的模板自检。
 
 ## 执行流程
 

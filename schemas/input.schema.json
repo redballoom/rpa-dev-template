@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/redballoom/rpa-dev-template/schemas/input.schema.json",
+  "title": "ShadowBot RPA Input",
+  "type": "object",
+  "required": [
+    "project",
+    "tasks"
+  ],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type",
+          "payload"
+        ],
+        "properties": {
+          "id": {},
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "payload": {
+            "type": "object"
+          },
+          "continue_on_error": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "operator": {
+          "type": "string"
+        },
+        "env": {
+          "type": "string",
+          "enum": [
+            "local",
+            "dev",
+            "test",
+            "staging",
+            "prod",
+            "production"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "app_name": {
+          "type": "string"
+        },
+        "fail_fast": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

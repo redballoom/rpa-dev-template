@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/redballoom/rpa-dev-template/schemas/handoff.schema.json",
+  "title": "RPA AI Workspace Handoff",
+  "type": "object",
+  "required": [
+    "workflow_schema_version",
+    "workspace",
+    "status",
+    "artifacts",
+    "verification",
+    "risks",
+    "next_workspace",
+    "requires_user_confirmation"
+  ],
+  "properties": {
+    "workflow_schema_version": {
+      "type": "string"
+    },
+    "workspace": {
+      "type": "string"
+    },
+    "gate": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready_for_review",
+        "approved",
+        "blocked",
+        "completed"
+      ]
+    },
+    "project_path": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_workspace": {
+      "type": "string"
+    },
+    "requires_user_confirmation": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

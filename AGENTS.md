@@ -22,6 +22,7 @@
    - `docs/PROJECT_ARCHITECTURE_OVERVIEW.md`
    - `docs/examples/input_*.json`
    - 如是故障修复，再读 `docs/ISSUE_FIX_WORKFLOW.md`
+   - 如是初始化验收、跨机器迁移或升级检查，再读 `.rpa_ai/workflow.template.json`、`schemas/`，并运行 `python tools/doctor.py`
    - 如需要工作流辅助，使用外部 Skill 仓库 `https://github.com/redballoom/rpa-dev-template-skills`
    - 注意：`calc_summary` 和 `template_demo` 是模板内置可运行示例；其他业务型示例用于说明 payload 形态，接入前必须实现对应 handler。
 
@@ -76,8 +77,39 @@
    - 至少覆盖正常成功、业务 warning、系统异常或关键边界条件。
    - 优先在 `tests/` 中增加小而明确的单元测试。
    - 涉及 runner 输入输出时，增加端到端测试或手动运行示例。
+   - 涉及模板迁移、版本、Schema、工作区交接或初始化能力时，必须运行 `python tools/doctor.py`。
    - 可运行时执行 `python -m pytest tests/ -v`。
    - 不能运行测试时，必须说明原因和剩余风险。
+
+## AI 工作区交接底座
+
+本模板通过 `.rpa_ai/workflow.template.json` 固化 AI 协作工作区：
+
+- `initialized`：项目初始化验收。
+- `contract_review`：业务契约确认。
+- `minimal_implementation`：最小可运行实现。
+- `runtime_verification`：运行验证。
+- `delivery`：交付验收。
+- `retrospective`：复盘沉淀。
+
+不同 AI 或不同会话接力时，应优先产出符合 `schemas/handoff.schema.json` 的 handoff 内容，至少说明当前工作区、状态、决策、产物、验证、风险和下一个工作区。不要只用自然语言把上下文留在聊天记录里。
+
+推荐 handoff 形态：
+
+```json
+{
+  "workflow_schema_version": "1.0.0",
+  "workspace": "contract_review",
+  "gate": "contract_review",
+  "status": "ready_for_review",
+  "decisions": [],
+  "artifacts": [],
+  "verification": [],
+  "risks": [],
+  "next_workspace": "minimal_implementation",
+  "requires_user_confirmation": true
+}
+```
 
 ## 代码修改原则
 
