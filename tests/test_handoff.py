@@ -71,6 +71,62 @@ def test_advance_handoff_creates_next_and_archives(monkeypatch, tmp_path):
     assert list(Path(history_dir).glob("*.json"))
 
 
+def test_close_current_handoff_records_gate_summary(monkeypatch, tmp_path):
+    workflow = _patch_paths(monkeypatch, tmp_path)
+    handoff.create_handoff("contract_review")
+    closed = handoff.close_current_handoff(
+        status="ready",
+        decisions=["tasks.type=sync_orders", "tasks.type=sync_orders"],
+        artifacts=["docs/examples/input_sync_orders.json"],
+        verification=["python tools/doctor.py: passed"],
+        risks=["等待用户确认进入 minimal_implementation"],
+    )
+    current, _history_dir = handoff.get_handoff_paths(workflow)
+    saved = handoff._load_json(current)
+
+    assert closed["status"] == "ready_for_review"
+    assert saved["decisions"] == ["tasks.type=sync_orders"]
+    assert saved["artifacts"] == ["docs/examples/input_sync_orders.json"]
+    assert saved["verification"] == ["python tools/doctor.py: passed"]
+    assert saved["risks"] == ["等待用户确认进入 minimal_implementation"]
+
+
+def test_close_current_handoff_normalizes_verified_to_completed(monkeypatch, tmp_path):
+    _patch_paths(monkeypatch, tmp_path)
+    handoff.create_handoff("runtime_verification")
+    closed = handoff.close_current_handoff(
+        status="verified",
+        verification=["python -m pytest tests/ -v: 71 passed"],
+        require_confirmation=False,
+    )
+
+    assert closed["status"] == "completed"
+    assert closed["requires_user_confirmation"] is False
+
+
+def test_cli_close_outputs_structured_handoff(monkeypatch, tmp_path, capsys):
+    _patch_paths(monkeypatch, tmp_path)
+    handoff.create_handoff("delivery")
+    rc = handoff.main(
+        [
+            "close",
+            "--status",
+            "delivered",
+            "--artifact",
+            "docs/INTERFACE_EXAMPLES.md",
+            "--verification",
+            "manual acceptance: passed",
+            "--risk",
+            "none",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert '"status": "completed"' in captured.out
+    assert "docs/INTERFACE_EXAMPLES.md" in captured.out
+
+
 def test_cli_gates_outputs_gate_list(capsys):
     rc = handoff.main(["gates"])
     captured = capsys.readouterr()

@@ -8,6 +8,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".rpa_ai" / "workflow.template.json"
+ALLOWED_STATUSES = {"draft", "ready_for_review", "approved", "blocked", "completed"}
+STATUS_ALIASES = {
+    "ready": "ready_for_review",
+    "ready-for-review": "ready_for_review",
+    "review": "ready_for_review",
+    "reviewed": "ready_for_review",
+    "verified": "completed",
+    "delivered": "completed",
+    "done": "completed",
+    "complete": "completed",
+}
 
 
 class HandoffError(Exception):
@@ -125,8 +136,7 @@ def validate_handoff_data(data, workflow=None):
     if "requires_user_confirmation" in data and not isinstance(data["requires_user_confirmation"], bool):
         errors.append("requires_user_confirmation must be a boolean")
 
-    allowed_statuses = {"draft", "ready_for_review", "approved", "blocked", "completed"}
-    if data.get("status") not in allowed_statuses:
+    if data.get("status") not in ALLOWED_STATUSES:
         errors.append("invalid status: %s" % data.get("status"))
 
     gate_ids = set(list_gate_ids(workflow))
@@ -162,6 +172,41 @@ def archive_current_handoff(label=""):
     return archived
 
 
+def close_current_handoff(
+    status="ready_for_review",
+    decisions=None,
+    artifacts=None,
+    verification=None,
+    risks=None,
+    next_workspace=None,
+    project_path=None,
+    run_id=None,
+    require_confirmation=None,
+):
+    workflow = load_workflow()
+    data = validate_current_handoff()
+    data["status"] = normalize_status(status)
+    _append_unique(data, "decisions", decisions or [])
+    _append_unique(data, "artifacts", artifacts or [])
+    _append_unique(data, "verification", verification or [])
+    _append_unique(data, "risks", risks or [])
+    if next_workspace is not None:
+        if next_workspace and get_gate(next_workspace, workflow) is None:
+            raise HandoffError("unknown next_workspace: %s" % next_workspace)
+        data["next_workspace"] = next_workspace
+    if project_path is not None:
+        data["project_path"] = project_path
+    if run_id is not None:
+        data["run_id"] = run_id
+    if require_confirmation is not None:
+        data["requires_user_confirmation"] = require_confirmation
+    data["updated_at"] = _now()
+    validate_handoff_data(data, workflow)
+    current, _history_dir = get_handoff_paths(workflow)
+    _write_json(current, data)
+    return data
+
+
 def advance_handoff(next_workspace=None, archive=True):
     workflow = load_workflow()
     data = validate_current_handoff()
@@ -185,6 +230,24 @@ def advance_handoff(next_workspace=None, archive=True):
 
 def _is_string_list(value):
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def normalize_status(status):
+    normalized = str(status or "").strip()
+    normalized = STATUS_ALIASES.get(normalized, normalized)
+    normalized = STATUS_ALIASES.get(normalized.lower(), normalized)
+    normalized = normalized.replace(" ", "_")
+    return normalized
+
+
+def _append_unique(data, key, values):
+    current = data.setdefault(key, [])
+    seen = set(current)
+    for value in values:
+        item = str(value).strip()
+        if item and item not in seen:
+            current.append(item)
+            seen.add(item)
 
 
 def _now():
@@ -222,6 +285,21 @@ def build_parser():
 
     sub.add_parser("validate", help="validate current handoff")
 
+    close_p = sub.add_parser("close", help="record gate decisions, artifacts, checks, and risks")
+    close_p.add_argument("--status", default="ready_for_review", help="handoff status or known alias")
+    close_p.add_argument("--decision", action="append", default=[], help="decision to append")
+    close_p.add_argument("--artifact", action="append", default=[], help="artifact path or note to append")
+    close_p.add_argument("--verification", action="append", default=[], help="verification result to append")
+    close_p.add_argument("--risk", action="append", default=[], help="risk or follow-up to append")
+    close_p.add_argument("--next", default=None, help="override next workflow gate")
+    close_p.add_argument("--project-path", default=None, help="override recorded project path")
+    close_p.add_argument("--run-id", default=None, help="override recorded run id")
+    close_p.add_argument(
+        "--no-confirmation",
+        action="store_true",
+        help="set requires_user_confirmation=false",
+    )
+
     advance_p = sub.add_parser("advance", help="archive current handoff and create the next one")
     advance_p.add_argument("--next", default="", help="target workflow gate id")
     advance_p.add_argument("--no-archive", action="store_true", help="do not archive before advancing")
@@ -249,6 +327,19 @@ def main(argv=None):
             _print_result("ok", data)
         elif args.command == "validate":
             data = validate_current_handoff()
+            _print_result("ok", data)
+        elif args.command == "close":
+            data = close_current_handoff(
+                status=args.status,
+                decisions=args.decision,
+                artifacts=args.artifact,
+                verification=args.verification,
+                risks=args.risk,
+                next_workspace=args.next,
+                project_path=args.project_path,
+                run_id=args.run_id,
+                require_confirmation=False if args.no_confirmation else None,
+            )
             _print_result("ok", data)
         elif args.command == "advance":
             data = advance_handoff(next_workspace=args.next or None, archive=not args.no_archive)

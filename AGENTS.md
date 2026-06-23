@@ -99,10 +99,13 @@
 
 ```bat
 python tools\handoff.py init --workspace contract_review
+python tools\handoff.py close --status ready_for_review --decision "tasks.type=your_task_type" --artifact "docs/examples/input_your_task_type.json" --verification "python -m pytest tests/ -v: passed" --risk "等待用户确认进入下一 Gate"
 python tools\handoff.py validate
 python tools\handoff.py advance
 python tools\handoff.py archive --label reviewed
 ```
+
+每个 Gate 收尾时，先运行 `close` 写入结构化交接，再在对话末尾给用户可读摘要和下一步确认项。聊天摘要应与 handoff 中的 `decisions`、`artifacts`、`verification`、`risks` 保持一致。
 
 推荐 handoff 形态：
 

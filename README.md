@@ -67,7 +67,7 @@ run.bat {run_id} {work_dir} {input_file}
 | [.rpa_ai/workflow.template.json](.rpa_ai/workflow.template.json) | AI 工作区 Gate、模板版本和 Skill 兼容声明 |
 | [schemas/](schemas/) | 输入、工作流和 handoff 的机器可读 Schema |
 | [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
-| [tools/handoff.py](tools/handoff.py) | AI 工作区交接文件的初始化、校验、推进和归档工具 |
+| [tools/handoff.py](tools/handoff.py) | AI 工作区交接文件的初始化、阶段收尾、校验、推进和归档工具 |
 | [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复 |
 
 ## 推荐协作方式
@@ -99,7 +99,7 @@ run.bat {run_id} {work_dir} {input_file}
 - `schemas/handoff.schema.json`：约束 AI 工作区之间的交接产物。
 - `schemas/workflow.schema.json`：约束工作流声明本身。
 - `tools/doctor.py`：初始化或升级后运行，检查必需文件、JSON、版本对齐、运行产物忽略规则和本机路径污染。
-- `tools/handoff.py`：生成、校验、推进和归档 `.rpa_ai/handoff/current.json`。
+- `tools/handoff.py`：生成、阶段收尾、校验、推进和归档 `.rpa_ai/handoff/current.json`。
 
 推荐在新项目初始化后执行：
 
@@ -113,10 +113,13 @@ python tools\doctor.py
 
 ```bat
 python tools\handoff.py init --workspace contract_review
+python tools\handoff.py close --status ready_for_review --decision "tasks.type=calc_summary" --artifact "docs/examples/input_calc_summary.json" --verification "python -m pytest tests/ -v: passed" --risk "等待用户确认进入下一 Gate"
 python tools\handoff.py validate
 python tools\handoff.py advance
 python tools\handoff.py archive --label reviewed
 ```
+
+每个 Gate 结束前，AI 应先用 `close` 把关键决策、产物、验证和风险写入 handoff，再在对话中给出可读摘要。这样跨会话或换 Agent 时，不需要依赖聊天记录才能恢复上下文。
 
 ## 状态码
 

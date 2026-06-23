@@ -180,7 +180,7 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 - `.rpa_ai/workflow.template.json`：AI 工作区 Gate、模板版本、所需 Skill 和 handoff 位置。
 - `schemas/`：输入、工作流和 handoff 的 Schema。
 - `tools/doctor.py`：检查模板底座是否完整。
-- `tools/handoff.py`：生成、校验、推进和归档当前 handoff。
+- `tools/handoff.py`：生成、阶段收尾、校验、推进和归档当前 handoff。
 
 新项目初始化后、模板升级后、或把项目迁移到另一台电脑后，先运行：
 
@@ -196,10 +196,13 @@ AI 在跨会话接力时，应把阶段交接内容整理成符合 `schemas/hand
 
 ```bat
 python tools\handoff.py init --workspace contract_review
+python tools\handoff.py close --status ready_for_review --decision "payload 字段已确认" --artifact "docs/examples/input_your_task_type.json" --verification "python tools/doctor.py: passed" --risk "等待用户确认进入下一 Gate"
 python tools\handoff.py validate
 python tools\handoff.py advance
 python tools\handoff.py archive --label reviewed
 ```
+
+`close` 是每个 Gate 的收尾动作。AI 应把阶段内已经形成的关键决策、产物、验证结果和剩余风险写入 `.rpa_ai/handoff/current.json`，然后再给用户自然语言摘要。这样下一轮对话或另一个 Agent 可以直接读取 handoff 恢复工作区状态。
 
 ## 最容易犯的小错误
 
