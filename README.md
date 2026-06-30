@@ -86,6 +86,7 @@ run.bat {run_id} {work_dir} {input_file}
 - `rpa-project-bootstrap`：从远程模板初始化新项目。
 - `rpa-contract-business`：新业务需求进入时，先做输入输出契约，再实现 handler。
 - `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
+- `rpa-gate-handoff`：在阶段收口时，整理 Gate 事实、生成交接块，并等待确认后再推进。
 
 远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
 

@@ -164,6 +164,7 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 | 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，校验交接文件 |
 | 新业务接入 | `rpa-contract-business` | 先拟定 `tasks[].type`、`payload`、输出和异常语义，用户确认后再写代码 |
 | 运行失败修复 | `rpa-fix-loop` | 读取 `runner_{run_id}.json`、日志和快照，判断边界后修复并测试 |
+| 阶段交接收口 | `rpa-gate-handoff` | 汇总 Gate 事实、生成交接块、校验闭环，并等待用户确认后推进 |
 
 理想配合方式：
 

@@ -6,7 +6,8 @@
   "required_skills": {
     "rpa-project-bootstrap": ">=0.1.0",
     "rpa-contract-business": ">=0.1.0",
-    "rpa-fix-loop": ">=0.1.0"
+    "rpa-fix-loop": ">=0.1.0",
+    "rpa-gate-handoff": ">=0.1.0"
   },
   "current_gate": "initialized",
   "gates": [
