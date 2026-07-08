@@ -7,6 +7,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CANONICAL_TEMPLATE_REPO = "https://github.com/redballoom/rpa-dev-template"
+CANONICAL_SKILLS_REPO = "https://github.com/redballoom/rpa-dev-template-skills"
+CANONICAL_SCHEMA_PREFIX = CANONICAL_TEMPLATE_REPO + "/schemas/"
 
 REQUIRED_FILES = [
     "VERSION",
@@ -170,6 +173,75 @@ def _check_docs_link_workflow(checks):
     )
 
 
+def _check_example_inputs(checks):
+    examples_dir = ROOT / "docs" / "examples"
+    if not examples_dir.exists():
+        _add_check(checks, "example_inputs", False, "docs/examples is missing")
+        return
+    examples = sorted(examples_dir.glob("input_*.json"))
+    if not examples:
+        _add_check(checks, "example_inputs", False, "docs/examples has no input_*.json files")
+        return
+    errors = []
+    for path in examples:
+        try:
+            json.loads(path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError as exc:
+            errors.append("%s: %s" % (path.name, exc))
+    _add_check(
+        checks,
+        "example_inputs",
+        not errors,
+        "example input files are present and parse successfully" if not errors else "; ".join(errors),
+    )
+
+
+def _check_canonical_repositories(checks):
+    errors = []
+    try:
+        workflow = _load_json(".rpa_ai/workflow.template.json")
+    except (OSError, json.JSONDecodeError) as exc:
+        _add_check(checks, "canonical_repositories", False, str(exc))
+        return
+
+    if workflow.get("template_repo") != CANONICAL_TEMPLATE_REPO:
+        errors.append("template_repo=%s" % workflow.get("template_repo"))
+    if workflow.get("skills_repo") != CANONICAL_SKILLS_REPO:
+        errors.append("skills_repo=%s" % workflow.get("skills_repo"))
+
+    for schema_name in ["workflow.schema.json", "handoff.schema.json", "input.schema.json"]:
+        rel_path = "schemas/%s" % schema_name
+        try:
+            schema = _load_json(rel_path)
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append("%s: %s" % (rel_path, exc))
+            continue
+        expected_id = CANONICAL_SCHEMA_PREFIX + schema_name
+        if schema.get("$id") != expected_id:
+            errors.append("%s $id=%s" % (rel_path, schema.get("$id")))
+
+    polluted_skill_links = []
+    skill_link_pattern = re.compile(
+        r"https://github\.com/redballoom/(?!rpa-dev-template-skills\b)[^\s`)\"']+-skills\b"
+    )
+    for item in ["README.md", "AGENTS.md", "docs/OPERATION_GUIDE.md"]:
+        path = ROOT / item
+        if not path.exists():
+            continue
+        text = _read_text(path)
+        if CANONICAL_SKILLS_REPO not in text:
+            errors.append("%s missing canonical skills repo" % item)
+        polluted_skill_links.extend("%s: %s" % (item, link) for link in skill_link_pattern.findall(text))
+    errors.extend(polluted_skill_links)
+
+    _add_check(
+        checks,
+        "canonical_repositories",
+        not errors,
+        "template and skills repository references are canonical" if not errors else "; ".join(errors),
+    )
+
+
 def run_checks():
     checks = []
     _check_required_files(checks)
@@ -179,6 +251,8 @@ def run_checks():
     _check_gitignore(checks)
     _check_portability(checks)
     _check_docs_link_workflow(checks)
+    _check_example_inputs(checks)
+    _check_canonical_repositories(checks)
     ok = all(item["ok"] for item in checks)
     return {
         "status": "ok" if ok else "failed",
