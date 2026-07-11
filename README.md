@@ -64,10 +64,8 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
-| [.rpa_ai/workflow.template.json](.rpa_ai/workflow.template.json) | AI 工作区 Gate、模板版本和 Skill 兼容声明 |
-| [schemas/](schemas/) | 输入、工作流和 handoff 的机器可读 Schema |
+| [schemas/input.schema.json](schemas/input.schema.json) | 影刀输入文件的机器可读 Schema |
 | [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
-| [tools/handoff.py](tools/handoff.py) | AI 工作区交接文件的初始化、阶段收尾、校验、推进和归档工具 |
 | [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复 |
 
 ## 推荐协作方式
@@ -86,21 +84,16 @@ run.bat {run_id} {work_dir} {input_file}
 - `rpa-project-bootstrap`：从远程模板初始化新项目。
 - `rpa-contract-business`：新业务需求进入时，先做输入输出契约，再实现 handler。
 - `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
-- `rpa-gate-handoff`：在阶段收口时，整理 Gate 事实、生成交接块，并等待确认后再推进。
 
 远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
 
 ## 可迁移与升级底座
 
-模板包含一组机器可读的协作文件，用于让不同电脑、不同 Agent 和不同项目之间保持一致。
+模板包含一组机器可读的工程文件，用于让不同电脑、不同 Agent 和不同项目之间保持一致。模板不维护 Agent 项目状态机；任务、记忆和会话流程由使用者选择的 Agent 或 Harness 管理。
 
 - `VERSION`：当前模板版本。
-- `.rpa_ai/workflow.template.json`：声明工作区 Gate、模板版本、所需 Skill 和 handoff 位置。
 - `schemas/input.schema.json`：约束影刀输入文件的基本结构。
-- `schemas/handoff.schema.json`：约束 AI 工作区之间的交接产物。
-- `schemas/workflow.schema.json`：约束工作流声明本身。
-- `tools/doctor.py`：初始化或升级后运行，检查必需文件、JSON、版本对齐、运行产物忽略规则和本机路径污染。
-- `tools/handoff.py`：生成、阶段收尾、校验、推进和归档 `.rpa_ai/handoff/current.json`。
+- `tools/doctor.py`：初始化或升级后运行，检查必需文件、JSON、模板版本、运行产物忽略规则和本机路径污染。
 
 推荐在新项目初始化后执行：
 
@@ -109,18 +102,6 @@ python tools\doctor.py
 ```
 
 如果 `doctor` 返回 `failed`，先修复底座问题，再进入业务契约和 handler 开发。
-
-常用 handoff 命令：
-
-```bat
-python tools\handoff.py init --workspace contract_review
-python tools\handoff.py close --status ready_for_review --decision "tasks.type=calc_summary" --artifact "docs/examples/input_calc_summary.json" --verification "python -m pytest tests/ -v: passed" --risk "等待用户确认进入下一 Gate"
-python tools\handoff.py validate
-python tools\handoff.py advance
-python tools\handoff.py archive --label reviewed
-```
-
-每个 Gate 结束前，AI 应先用 `close` 把关键决策、产物、验证和风险写入 handoff，再在对话中给出可读摘要。这样跨会话或换 Agent 时，不需要依赖聊天记录才能恢复上下文。
 
 ## 状态码
 

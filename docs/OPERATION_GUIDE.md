@@ -161,10 +161,9 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 
 | 阶段 | 使用 Skill | 目标 |
 | --- | --- | --- |
-| 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，校验交接文件 |
+| 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，执行核心自检 |
 | 新业务接入 | `rpa-contract-business` | 先拟定 `tasks[].type`、`payload`、输出和异常语义，用户确认后再写代码 |
 | 运行失败修复 | `rpa-fix-loop` | 读取 `runner_{run_id}.json`、日志和快照，判断边界后修复并测试 |
-| 阶段交接收口 | `rpa-gate-handoff` | 汇总 Gate 事实、生成交接块、校验闭环，并等待用户确认后推进 |
 
 理想配合方式：
 
@@ -175,13 +174,11 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 
 ## 初始化和升级后的自检
 
-为了让模板满足可复用、可迁移、可升级，项目根目录提供了机器可读的工作流和自检脚本：
+为了让模板满足可复用、可迁移、可升级，项目根目录提供了机器可读的运行契约和自检脚本：
 
 - `VERSION`：模板版本。
-- `.rpa_ai/workflow.template.json`：AI 工作区 Gate、模板版本、所需 Skill 和 handoff 位置。
-- `schemas/`：输入、工作流和 handoff 的 Schema。
+- `schemas/input.schema.json`：影刀输入文件 Schema。
 - `tools/doctor.py`：检查模板底座是否完整。
-- `tools/handoff.py`：生成、阶段收尾、校验、推进和归档当前 handoff。
 
 新项目初始化后、模板升级后、或把项目迁移到另一台电脑后，先运行：
 
@@ -189,21 +186,9 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 python tools\doctor.py
 ```
 
-通过后再进入业务契约阶段。若失败，优先修复自检报告中的必需文件、版本对齐、JSON 结构、忽略规则或本机绝对路径问题。
+通过后再进入业务契约阶段。若失败，优先修复自检报告中的必需文件、JSON 结构、忽略规则或本机绝对路径问题。
 
-AI 在跨会话接力时，应把阶段交接内容整理成符合 `schemas/handoff.schema.json` 的 handoff，而不是只依赖聊天上下文。推荐至少包含：当前工作区、状态、关键决策、产物、验证、风险、下一个工作区、是否需要用户确认。
-
-常用命令：
-
-```bat
-python tools\handoff.py init --workspace contract_review
-python tools\handoff.py close --status ready_for_review --decision "payload 字段已确认" --artifact "docs/examples/input_your_task_type.json" --verification "python tools/doctor.py: passed" --risk "等待用户确认进入下一 Gate"
-python tools\handoff.py validate
-python tools\handoff.py advance
-python tools\handoff.py archive --label reviewed
-```
-
-`close` 是每个 Gate 的收尾动作。AI 应把阶段内已经形成的关键决策、产物、验证结果和剩余风险写入 `.rpa_ai/handoff/current.json`，然后再给用户自然语言摘要。这样下一轮对话或另一个 Agent 可以直接读取 handoff 恢复工作区状态。
+模板不规定跨会话任务、记忆或阶段状态的存储方式。使用者可以选择任意 Agent/Harness；这些工具不得成为 `run.bat`、runner 或业务代码的运行依赖。
 
 ## 最容易犯的小错误
 

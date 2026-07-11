@@ -36,8 +36,6 @@ Thumbs.db
 .workbuddy/
 
 # ── AI 工作区运行态交接文件 ──────────────────────────────────
-.rpa_ai/handoff/current.json
-.rpa_ai/handoff/history/
 
 # ── 第三方依赖（按需启用）───────────────────────────────────
 # node_modules/

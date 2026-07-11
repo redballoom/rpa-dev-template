@@ -1,6 +1,5 @@
-"""Template health checks for portability, handoff, and upgrade readiness."""
+"""Template health checks for portability and runtime readiness."""
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,18 +21,11 @@ REQUIRED_FILES = [
     "docs/OPERATION_GUIDE.md",
     "docs/SHADOWBOT_INPUT_CONTRACT.md",
     "docs/ISSUE_FIX_WORKFLOW.md",
-    ".rpa_ai/workflow.template.json",
-    "schemas/workflow.schema.json",
-    "schemas/handoff.schema.json",
     "schemas/input.schema.json",
-    "tools/handoff.py",
 ]
 
 JSON_FILES = [
     "project.template.json",
-    ".rpa_ai/workflow.template.json",
-    "schemas/workflow.schema.json",
-    "schemas/handoff.schema.json",
     "schemas/input.schema.json",
 ]
 
@@ -85,39 +77,13 @@ def _check_json_files(checks):
     )
 
 
-def _check_version_alignment(checks):
+def _check_version(checks):
     try:
         version = _read_text(ROOT / "VERSION").strip()
-        workflow = _load_json(".rpa_ai/workflow.template.json")
-    except (OSError, json.JSONDecodeError) as exc:
-        _add_check(checks, "version_alignment", False, str(exc))
+    except OSError as exc:
+        _add_check(checks, "version", False, str(exc))
         return
-    workflow_version = str(workflow.get("template_version", "")).strip()
-    ok = bool(version) and version == workflow_version
-    _add_check(
-        checks,
-        "version_alignment",
-        ok,
-        "VERSION matches workflow template" if ok else "VERSION=%s workflow=%s" % (version, workflow_version),
-    )
-
-
-def _check_workflow_shape(checks):
-    try:
-        workflow = _load_json(".rpa_ai/workflow.template.json")
-    except (OSError, json.JSONDecodeError) as exc:
-        _add_check(checks, "workflow_shape", False, str(exc))
-        return
-    gates = workflow.get("gates", [])
-    gate_ids = [gate.get("id") for gate in gates if isinstance(gate, dict)]
-    required = {"initialized", "contract_review", "minimal_implementation", "runtime_verification", "delivery"}
-    ok = required.issubset(set(gate_ids)) and workflow.get("required_skills")
-    _add_check(
-        checks,
-        "workflow_shape",
-        ok,
-        "workflow gates and required skills are present" if ok else "workflow gates or required skills incomplete",
-    )
+    _add_check(checks, "version", bool(version), "VERSION is declared" if version else "VERSION is empty")
 
 
 def _check_gitignore(checks):
@@ -136,12 +102,7 @@ def _check_gitignore(checks):
 
 
 def _check_portability(checks):
-    scanned = [
-        "README.md",
-        "AGENTS.md",
-        "project.template.json",
-        ".rpa_ai/workflow.template.json",
-    ]
+    scanned = ["README.md", "AGENTS.md", "project.template.json"]
     hits = []
     local_path_pattern = re.compile(r"[A-Za-z]:\\Users\\|C:\\Users\\redballoon", re.IGNORECASE)
     for item in scanned:
@@ -156,83 +117,36 @@ def _check_portability(checks):
     )
 
 
-def _check_docs_link_workflow(checks):
-    try:
-        readme = _read_text(ROOT / "README.md")
-        agents = _read_text(ROOT / "AGENTS.md")
-    except OSError as exc:
-        _add_check(checks, "workflow_docs_linked", False, str(exc))
-        return
-    needed = [".rpa_ai/workflow.template.json", "tools/doctor.py", "tools/handoff.py", "schemas/"]
-    missing = [item for item in needed if item not in readme + agents]
-    _add_check(
-        checks,
-        "workflow_docs_linked",
-        not missing,
-        "workflow productization files are documented" if not missing else "missing doc references: %s" % ", ".join(missing),
-    )
-
-
 def _check_example_inputs(checks):
     examples_dir = ROOT / "docs" / "examples"
-    if not examples_dir.exists():
-        _add_check(checks, "example_inputs", False, "docs/examples is missing")
-        return
-    examples = sorted(examples_dir.glob("input_*.json"))
-    if not examples:
-        _add_check(checks, "example_inputs", False, "docs/examples has no input_*.json files")
-        return
+    examples = sorted(examples_dir.glob("input_*.json")) if examples_dir.exists() else []
     errors = []
     for path in examples:
         try:
             json.loads(path.read_text(encoding="utf-8-sig"))
         except json.JSONDecodeError as exc:
             errors.append("%s: %s" % (path.name, exc))
-    _add_check(
-        checks,
-        "example_inputs",
-        not errors,
-        "example input files are present and parse successfully" if not errors else "; ".join(errors),
+    ok = bool(examples) and not errors
+    message = "example input files are present and parse successfully" if ok else (
+        "; ".join(errors) if errors else "docs/examples has no input_*.json files"
     )
+    _add_check(checks, "example_inputs", ok, message)
 
 
 def _check_canonical_repositories(checks):
     errors = []
-    try:
-        workflow = _load_json(".rpa_ai/workflow.template.json")
-    except (OSError, json.JSONDecodeError) as exc:
-        _add_check(checks, "canonical_repositories", False, str(exc))
-        return
+    schema = _load_json("schemas/input.schema.json")
+    expected_id = CANONICAL_SCHEMA_PREFIX + "input.schema.json"
+    if schema.get("$id") != expected_id:
+        errors.append("schemas/input.schema.json $id=%s" % schema.get("$id"))
 
-    if workflow.get("template_repo") != CANONICAL_TEMPLATE_REPO:
-        errors.append("template_repo=%s" % workflow.get("template_repo"))
-    if workflow.get("skills_repo") != CANONICAL_SKILLS_REPO:
-        errors.append("skills_repo=%s" % workflow.get("skills_repo"))
-
-    for schema_name in ["workflow.schema.json", "handoff.schema.json", "input.schema.json"]:
-        rel_path = "schemas/%s" % schema_name
-        try:
-            schema = _load_json(rel_path)
-        except (OSError, json.JSONDecodeError) as exc:
-            errors.append("%s: %s" % (rel_path, exc))
-            continue
-        expected_id = CANONICAL_SCHEMA_PREFIX + schema_name
-        if schema.get("$id") != expected_id:
-            errors.append("%s $id=%s" % (rel_path, schema.get("$id")))
-
-    polluted_skill_links = []
-    skill_link_pattern = re.compile(
-        r"https://github\.com/redballoom/(?!rpa-dev-template-skills\b)[^\s`)\"']+-skills\b"
-    )
+    combined = ""
     for item in ["README.md", "AGENTS.md", "docs/OPERATION_GUIDE.md"]:
         path = ROOT / item
-        if not path.exists():
-            continue
-        text = _read_text(path)
-        if CANONICAL_SKILLS_REPO not in text:
-            errors.append("%s missing canonical skills repo" % item)
-        polluted_skill_links.extend("%s: %s" % (item, link) for link in skill_link_pattern.findall(text))
-    errors.extend(polluted_skill_links)
+        if path.exists():
+            combined += _read_text(path)
+    if CANONICAL_SKILLS_REPO not in combined:
+        errors.append("canonical skills repository is not documented")
 
     _add_check(
         checks,
@@ -246,11 +160,9 @@ def run_checks():
     checks = []
     _check_required_files(checks)
     _check_json_files(checks)
-    _check_version_alignment(checks)
-    _check_workflow_shape(checks)
+    _check_version(checks)
     _check_gitignore(checks)
     _check_portability(checks)
-    _check_docs_link_workflow(checks)
     _check_example_inputs(checks)
     _check_canonical_repositories(checks)
     ok = all(item["ok"] for item in checks)
