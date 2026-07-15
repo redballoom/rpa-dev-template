@@ -153,17 +153,37 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 
 不要跳过第 2 和第 3 步。这个模板的核心是契约优先：先确定影刀给什么、Python 出什么，再写业务代码。
 
+项目安装 Trellis 时，本地进度优先保存在当前 task：
+
+- `task.json.meta.progress`：当前 Gate、当前工作、最近检查点、下一步、责任方和阻塞信息。
+- `progress.md`：任务内追加式检查点历史。
+- PRD、Design、Implement：需求、契约和计划。
+- Git、runner：代码和运行证据。
+
+每个 Gate 或关键里程碑完成时，AI 应先显式询问：
+
+```text
+当前 Gate 是否验收通过，并记录到 Trellis？
+```
+
+用户确认后，先更新并回读 Trellis 本地进度，再推进到下一 Gate。配置了项目管理 Base 时，再询问是否同时同步 Base 的 `当前Gate`、`下一步建议` 和对应里程碑事件。
+
+没有 Base 的项目仍可完成需求、开发、联调、验收和归档。不要因为代码、测试或 runner 已通过，就跳过本地进度记录；也不要因为缺少 Base 链接而阻塞本地闭环。
+
+`当前Gate` 表示当前等待关闭的 Gate。阻塞是独立属性：保持 Gate 不变，记录阻塞原因、责任方和解除条件，不要用一个通用“阻塞 Gate”覆盖真实进度。
+
 ## Skill 在哪个环节使用
 
 配套 Skills 维护在独立远程仓库：`https://github.com/redballoom/rpa-dev-template-skills`。
 
-它们不是业务代码，而是帮助 AI 按正确顺序使用模板。初始化 Skill 在项目创建前使用；业务接入和修复 Skill 在项目创建后配合本模板文档使用。
+它们不是业务代码，而是帮助 AI 按正确顺序使用模板。初始化 Skill 在项目创建前使用；业务接入、修复和交付收尾 Skill 在项目创建后配合本模板文档使用。
 
 | 阶段 | 使用 Skill | 目标 |
 | --- | --- | --- |
 | 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，执行核心自检 |
 | 新业务接入 | `rpa-contract-business` | 先拟定 `tasks[].type`、`payload`、输出和异常语义，用户确认后再写代码 |
 | 运行失败修复 | `rpa-fix-loop` | 读取 `runner_{run_id}.json`、日志和快照，判断边界后修复并测试 |
+| 本地检查点 / Gate关闭 / 交付收尾 | `rpa-delivery-close` | 记录 Trellis 本地进度，按用户验收推进 Gate，并在配置时投影到 Base；业务验收后校准 Git、runner、影刀结果 |
 
 理想配合方式：
 
@@ -171,6 +191,20 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 - Skill 负责约束 AI 的工作顺序。
 - AI 负责实现、测试、解释风险。
 - 模板负责稳定输入输出、异常语义和运行产物。
+
+交付收尾 Skill 可以读取和更新 Trellis 等外部 Harness 的任务证据，但这些工具不是模板运行依赖。`run.bat`、`runner.py` 和业务 handler 不应为了进度记录或交付归档而依赖任何 Agent 状态文件。
+
+## 新会话如何恢复项目
+
+项目使用 Trellis 时，AI 按以下顺序恢复：
+
+1. 当前 task 或用户指定 task 的 `task.json`。
+2. `task.json.meta.progress` 当前快照。
+3. task 目录中 `progress.md` 的最后一个检查点。
+4. PRD、Design、Implement。
+5. 最近 Git 提交和相关 `runner_{run_id}.json`。
+
+恢复后应能直接回答当前 Gate、最近完成内容、下一步、责任方、阻塞和证据。飞书 Base 可以展示这些摘要，但不是恢复项目的必要条件。
 
 ## 初始化和升级后的自检
 
@@ -188,7 +222,7 @@ python tools\doctor.py
 
 通过后再进入业务契约阶段。若失败，优先修复自检报告中的必需文件、JSON 结构、忽略规则或本机绝对路径问题。
 
-模板不规定跨会话任务、记忆或阶段状态的存储方式。使用者可以选择任意 Agent/Harness；这些工具不得成为 `run.bat`、runner 或业务代码的运行依赖。
+模板不强制安装特定 Agent/Harness。使用 Trellis 时，推荐以上本地进度契约；使用其他 Harness 时应提供等价的当前快照、检查点历史和证据引用。这些工具不得成为 `run.bat`、runner 或业务代码的运行依赖。
 
 ## 最容易犯的小错误
 
@@ -201,6 +235,8 @@ python tools\doctor.py
 - 生产运行时调用 `git_controller.py` 切分支。
 - `context.env` 漏填，导致工单环境判断只能退回 Git 分支。
 - 使用 `fail_fast=false` 处理有依赖关系的任务。
+- 工作已完成，但没有更新本地 Gate、下一步和责任方。
+- 把 Base 当成唯一进度源，导致离线或无权限时无法恢复项目。
 
 ## 使用前检查
 

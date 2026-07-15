@@ -66,7 +66,7 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
 | [schemas/input.schema.json](schemas/input.schema.json) | 影刀输入文件的机器可读 Schema |
 | [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
-| [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复 |
+| [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复、本地进度与交付收尾 |
 
 ## 推荐协作方式
 
@@ -84,6 +84,7 @@ run.bat {run_id} {work_dir} {input_file}
 - `rpa-project-bootstrap`：从远程模板初始化新项目。
 - `rpa-contract-business`：新业务需求进入时，先做输入输出契约，再实现 handler。
 - `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
+- `rpa-delivery-close`：记录 Trellis 本地检查点、经用户验收关闭 Gate，并在配置时投影到 Base。
 
 远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
 
