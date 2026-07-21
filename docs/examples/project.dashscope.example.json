@@ -1,0 +1,20 @@
+{
+  "project": "Your RPA Project",
+  "version": "2.0.0",
+  "feishu_webhook": "",
+  "linear": {
+    "api_key": "",
+    "team_id": "",
+    "project_name": "Your RPA Project",
+    "project_id": "",
+    "assignee_id": ""
+  },
+  "ai": {
+    "enabled": true,
+    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "api_key": "local-secret",
+    "model": "qwen3.7-max",
+    "api_format": "chat_completions",
+    "timeout": 45
+  }
+}

@@ -105,6 +105,8 @@ OpenAI-compatible Chat Completions 代理示例：
 }
 ```
 
+DashScope/Qwen 可参考 `docs/examples/project.dashscope.example.json`。使用时复制到本地 `project.json`，只在本地填入真实 `ai.api_key`、`linear.api_key` 和 `linear.team_id`，不要提交真实密钥。
+
 Responses API 代理只需将格式切换为：
 
 ```json
