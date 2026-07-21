@@ -17,7 +17,9 @@ def test_config_loaded():
     # 默认模板有 project 字段
     assert hasattr(config, "PROJECT")
     assert hasattr(config, "AI_ENABLED")
+    assert hasattr(config, "AI_BASE_URL")
     assert hasattr(config, "AI_API_KEY")
+    assert hasattr(config, "AI_API_FORMAT")
 
 
 def test_validate_config_default():
@@ -70,3 +72,25 @@ def test_validate_config_ai_warning():
     finally:
         cfg.AI_ENABLED = original_enabled
         cfg.AI_API_KEY = original_key
+
+
+def test_validate_config_ai_connection_warnings():
+    """AI 启用时校验 base_url、model 和 api_format。"""
+    import core.config as cfg
+    originals = (cfg.AI_ENABLED, cfg.AI_BASE_URL, cfg.AI_MODEL, cfg.AI_API_FORMAT)
+    try:
+        cfg.AI_ENABLED = True
+        cfg.AI_BASE_URL = ""
+        cfg.AI_MODEL = ""
+        cfg.AI_API_FORMAT = "legacy"
+        warnings = cfg.validate_config()["warnings"]
+        assert any("Base URL" in item for item in warnings)
+        assert any("模型" in item for item in warnings)
+        assert any("格式不支持" in item for item in warnings)
+    finally:
+        cfg.AI_ENABLED, cfg.AI_BASE_URL, cfg.AI_MODEL, cfg.AI_API_FORMAT = originals
+
+
+def test_config_ai_format_is_canonical():
+    from core import config
+    assert config.AI_API_FORMAT in config.AI_API_FORMATS

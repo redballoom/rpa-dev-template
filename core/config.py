@@ -70,12 +70,21 @@ LINEAR_PROJECT_NAME = _linear_cfg.get("project_name", "")
 LINEAR_PROJECT_ID = _linear_cfg.get("project_id", "")
 LINEAR_ASSIGNEE_ID = _linear_cfg.get("assignee_id", "")
 
-# ── AI 分析 (Volcengine Ark) ────────────────────────────────
+# ── AI 分析 (OpenAI-compatible) ─────────────────────────────
 _ai_cfg = _cfg.get("ai", {})
 AI_ENABLED = _ai_cfg.get("enabled", False)
+AI_BASE_URL = _ai_cfg.get("base_url", "")
 AI_API_KEY = _ai_cfg.get("api_key", "")
 AI_MODEL = _ai_cfg.get("model", "")
+_ai_api_format_raw = str(_ai_cfg.get("api_format", "chat_completions") or "").strip().lower().replace("-", "_")
+AI_API_FORMAT = {
+    "chat.completions": "chat_completions",
+    "chat_completion": "chat_completions",
+    "completions": "chat_completions",
+    "response": "responses",
+}.get(_ai_api_format_raw, _ai_api_format_raw)
 AI_TIMEOUT = _ai_cfg.get("timeout", 15)
+AI_API_FORMATS = ("chat_completions", "responses")
 
 # ── 配置校验 ────────────────────────────────────────────────
 
@@ -113,8 +122,15 @@ def validate_config() -> dict:
     # AI 启用但缺 API Key
     if AI_ENABLED and not AI_API_KEY:
         warnings.append("AI 分析已启用但 API Key 未配置 (AI_API_KEY)")
+    if AI_ENABLED and not AI_BASE_URL:
+        warnings.append("AI 分析已启用但 Base URL 未配置 (AI_BASE_URL)")
     if AI_ENABLED and not AI_MODEL:
         warnings.append("AI 分析已启用但模型未配置 (AI_MODEL)")
+    if AI_ENABLED and AI_API_FORMAT not in AI_API_FORMATS:
+        warnings.append(
+            "AI API 格式不支持: %s，可选值: %s"
+            % (AI_API_FORMAT, ", ".join(AI_API_FORMATS))
+        )
 
     is_fatal = len(missing) > 0
     parts = []

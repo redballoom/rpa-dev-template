@@ -87,7 +87,35 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 - `context.env=test/dev/local/staging` 时不创建生产工单。
 - 系统异常默认仍中断后续任务，但可以通过 `context.fail_fast=false` 支持独立批任务继续执行。
 - 单个任务也可以设置 `continue_on_error=true`，允许该任务失败后继续后续任务。
-- AI 模型默认值已清空，启用 AI 分析时必须在本地 `project.json` 明确配置模型和 key。
+- AI 分析默认关闭。启用时必须在本地 `project.json` 配置 `base_url`、`api_key`、`model` 和 `api_format`。
+- `ai.api_format` 支持 `chat_completions` 与 `responses`；`base_url` 只填写 API 根地址，例如 `https://api.openai.com/v1`，不要附加 endpoint。
+
+OpenAI-compatible Chat Completions 代理示例：
+
+```json
+{
+  "ai": {
+    "enabled": true,
+    "base_url": "https://proxy.example.com/v1",
+    "api_key": "local-secret",
+    "model": "model-name",
+    "api_format": "chat_completions",
+    "timeout": 30
+  }
+}
+```
+
+Responses API 代理只需将格式切换为：
+
+```json
+{
+  "ai": {
+    "api_format": "responses"
+  }
+}
+```
+
+程序会按格式分别请求 `/chat/completions` 或 `/responses`。兼容代理若返回 Chat Completions 的 `choices[].message.content`、Responses 顶层 `output_text`，或 `output[].content[].text`，都会归一化为同一种文本分析结果。
 
 ## 状态码与影刀动作
 

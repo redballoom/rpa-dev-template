@@ -11,9 +11,20 @@ Upgraded from "Debugger" to "Architect" role:
 import json as _json
 import requests
 from typing import Optional
-from core.config import AI_ENABLED, AI_API_KEY, AI_MODEL, AI_TIMEOUT
+from core.config import (
+    AI_API_FORMAT,
+    AI_API_KEY,
+    AI_BASE_URL,
+    AI_ENABLED,
+    AI_MODEL,
+    AI_TIMEOUT,
+)
 
-ARK_API_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+
+_API_PATHS = {
+    "chat_completions": "/chat/completions",
+    "responses": "/responses",
+}
 
 # ── 分类体系：与 exceptions.SYSTEM_CATEGORIES 完全对齐 ─────────
 from core.exceptions import SYSTEM_CATEGORIES
@@ -63,32 +74,27 @@ Return ONLY valid JSON in this exact format (no markdown fences, no extra text):
 
 
 def analyze_crash(snapshot: dict) -> Optional[dict]:
-    if not AI_ENABLED or not AI_API_KEY:
-        print("[ai_analyzer] AI disabled or no API key, skipping")
+    if not AI_ENABLED or not AI_API_KEY or not AI_BASE_URL or not AI_MODEL:
+        print("[ai_analyzer] AI disabled or incomplete configuration, skipping")
         return None
     prompt = _build_prompt(snapshot)
     try:
+        api_format = _normalize_api_format(AI_API_FORMAT)
+        api_url = _build_api_url(AI_BASE_URL, api_format)
         resp = requests.post(
-            ARK_API_URL,
+            api_url,
             headers={
                 "Authorization": "Bearer " + AI_API_KEY,
                 "Content-Type": "application/json",
             },
-            json={
-                "model": AI_MODEL,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.1,
-            },
+            json=_build_request_payload(api_format, AI_MODEL, _SYSTEM_PROMPT, prompt),
             timeout=AI_TIMEOUT,
         )
         if resp.status_code != 200:
             print("[ai_analyzer] API error: %d %s" % (resp.status_code, resp.text[:200]))
             return None
         result = resp.json()
-        raw = result["choices"][0]["message"]["content"]
+        raw = _extract_response_text(result)
         return _extract_json(raw)
     except requests.Timeout:
         print("[ai_analyzer] Timeout (%ds), skipping" % AI_TIMEOUT)
@@ -96,6 +102,105 @@ def analyze_crash(snapshot: dict) -> Optional[dict]:
     except Exception as e:
         print("[ai_analyzer] Failed (non-blocking): %s" % e)
         return None
+
+
+def _normalize_api_format(value: str) -> str:
+    normalized = (value or "").strip().lower().replace("-", "_")
+    aliases = {
+        "chat.completions": "chat_completions",
+        "chat_completion": "chat_completions",
+        "completions": "chat_completions",
+        "response": "responses",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in _API_PATHS:
+        raise ValueError("Unsupported AI api_format: %s" % value)
+    return normalized
+
+
+def _build_api_url(base_url: str, api_format: str) -> str:
+    """Build a standard endpoint while tolerating a full endpoint as input."""
+    normalized_format = _normalize_api_format(api_format)
+    root = (base_url or "").strip().rstrip("/")
+    if not root:
+        raise ValueError("AI base_url is required")
+    for path in _API_PATHS.values():
+        if root.endswith(path):
+            root = root[: -len(path)].rstrip("/")
+            break
+    return root + _API_PATHS[normalized_format]
+
+
+def _build_request_payload(api_format: str, model: str, system_prompt: str, user_prompt: str) -> dict:
+    normalized_format = _normalize_api_format(api_format)
+    if normalized_format == "responses":
+        return {
+            "model": model,
+            "instructions": system_prompt,
+            "input": user_prompt,
+        }
+    return {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.1,
+    }
+
+
+def _content_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        text = item.get("text")
+        if isinstance(text, str):
+            parts.append(text)
+        elif isinstance(text, dict) and isinstance(text.get("value"), str):
+            parts.append(text["value"])
+    return "".join(parts)
+
+
+def _extract_response_text(result: dict) -> str:
+    """Extract text from Chat Completions and Responses API proxy shapes."""
+    if not isinstance(result, dict):
+        raise ValueError("AI response must be a JSON object")
+
+    output_text = result.get("output_text")
+    if isinstance(output_text, str) and output_text:
+        return output_text
+
+    choices = result.get("choices")
+    if isinstance(choices, list) and choices:
+        choice = choices[0]
+        if isinstance(choice, dict):
+            message = choice.get("message")
+            if isinstance(message, dict):
+                text = _content_text(message.get("content"))
+                if text:
+                    return text
+            text = choice.get("text")
+            if isinstance(text, str) and text:
+                return text
+
+    output = result.get("output")
+    if isinstance(output, list):
+        parts = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            text = _content_text(item.get("content"))
+            if text:
+                parts.append(text)
+        if parts:
+            return "".join(parts)
+
+    raise ValueError("AI response contains no supported text output")
 
 
 def _normalize_category(cat: str) -> str:

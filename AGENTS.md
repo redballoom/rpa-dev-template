@@ -89,7 +89,7 @@
 - 不修改 `run.bat` 的参数契约，除非影刀调用方式同步变化。
 - 新增 `tasks[].type` 时必须同步实现 handler、示例输入和测试；不要只更新文档。
 - 不提交运行产物，例如 `runner_*.json`、`input*.json`、`logs/`、`crash_snapshots/`、`data/`。
-- 不提交或泄露 `project.json` 中的真实密钥、webhook、Linear 配置。
+- 不提交或泄露 `project.json` 中的真实密钥、webhook、Linear 或 AI 代理配置。
 
 ## 推荐实现模板
 
