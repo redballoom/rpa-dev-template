@@ -27,7 +27,7 @@ def _load_json_file(path: str) -> dict:
     if not os.path.exists(path):
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     except (json.JSONDecodeError, IOError) as e:
         print("[config] WARN: %s read failed: %s" % (os.path.basename(path), e))

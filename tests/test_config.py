@@ -94,3 +94,17 @@ def test_validate_config_ai_connection_warnings():
 def test_config_ai_format_is_canonical():
     from core import config
     assert config.AI_API_FORMAT in config.AI_API_FORMATS
+
+
+def test_load_json_file_accepts_utf8_bom(tmp_path):
+    """PowerShell and some Windows tools may write JSON with UTF-8 BOM."""
+    from core.config import _load_json_file
+
+    config_path = tmp_path / "project.json"
+    config_path.write_bytes(
+        b"\xef\xbb\xbf" + '{"project": "BOM Project", "ai": {"enabled": true}}'.encode("utf-8")
+    )
+
+    data = _load_json_file(str(config_path))
+    assert data["project"] == "BOM Project"
+    assert data["ai"]["enabled"] is True
