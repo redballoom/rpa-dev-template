@@ -30,7 +30,7 @@ JSON_FILES = [
 ]
 
 GITIGNORE_PATTERNS = [
-    "project.json",
+    "/project.json",
     "runner_*.json",
     "/input_*.json",
     "logs/",
