@@ -48,6 +48,9 @@ python runner.py --run_id rpa_001 --repo_path C:\CodePJ\Demo --work_dir C:\CodeP
 
 Python 默认在项目根目录输出 `runner_{run_id}.json`：
 
+统一外层结构由 `schemas/output.schema.json` 约束。各项目在契约阶段约定
+`data.results[].data` 的业务字段，影刀先消费统一状态，再消费业务结果。
+
 ```json
 {
   "status": "success",

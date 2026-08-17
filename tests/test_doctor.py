@@ -31,6 +31,13 @@ def test_input_schema_repository_is_canonical():
     assert schema["$id"] == doctor.CANONICAL_SCHEMA_PREFIX + "input.schema.json"
 
 
+def test_output_schema_repository_is_canonical():
+    schema = doctor._load_json("schemas/output.schema.json")
+    assert schema["$id"] == doctor.CANONICAL_SCHEMA_PREFIX + "output.schema.json"
+    assert "fatal" in schema["properties"]["status"]["enum"]
+    assert "run_id" in schema["properties"]["data"]["required"]
+
+
 def test_runtime_template_has_no_agent_workflow_dependency():
     assert not (doctor.ROOT / ".rpa_ai" / "workflow.template.json").exists()
     assert not (doctor.ROOT / "tools" / "handoff.py").exists()

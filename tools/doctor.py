@@ -22,11 +22,13 @@ REQUIRED_FILES = [
     "docs/SHADOWBOT_INPUT_CONTRACT.md",
     "docs/ISSUE_FIX_WORKFLOW.md",
     "schemas/input.schema.json",
+    "schemas/output.schema.json",
 ]
 
 JSON_FILES = [
     "project.template.json",
     "schemas/input.schema.json",
+    "schemas/output.schema.json",
 ]
 
 GITIGNORE_PATTERNS = [
@@ -135,10 +137,12 @@ def _check_example_inputs(checks):
 
 def _check_canonical_repositories(checks):
     errors = []
-    schema = _load_json("schemas/input.schema.json")
-    expected_id = CANONICAL_SCHEMA_PREFIX + "input.schema.json"
-    if schema.get("$id") != expected_id:
-        errors.append("schemas/input.schema.json $id=%s" % schema.get("$id"))
+    for schema_name in ["input.schema.json", "output.schema.json"]:
+        schema_path = "schemas/" + schema_name
+        schema = _load_json(schema_path)
+        expected_id = CANONICAL_SCHEMA_PREFIX + schema_name
+        if schema.get("$id") != expected_id:
+            errors.append("%s $id=%s" % (schema_path, schema.get("$id")))
 
     combined = ""
     for item in ["README.md", "AGENTS.md", "docs/OPERATION_GUIDE.md"]:

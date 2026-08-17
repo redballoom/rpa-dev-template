@@ -183,24 +183,30 @@ Responses API 代理只需将格式切换为：
 
 不要跳过第 2 和第 3 步。这个模板的核心是契约优先：先确定影刀给什么、Python 出什么，再写业务代码。
 
-项目安装 Trellis 时，本地进度优先保存在当前 task：
+项目同时安装 Trellis 和 Project Gate Controller 时，按事实类型分别保存：
 
-- `task.json.meta.progress`：当前 Gate、当前工作、最近检查点、下一步、责任方和阻塞信息。
-- `progress.md`：任务内追加式检查点历史。
-- PRD、Design、Implement：需求、契约和计划。
-- Git、runner：代码和运行证据。
+- Project Gate Controller `.project-gates/project.json`：项目唯一 `current_gate`。
+- Project Gate Controller `.project-gates/gate-history.md`：用户已接受的 Gate close 和 revalidation 事件。
+- `.hermes/`：Hermes Agent 的项目插件命名空间，不保存项目 Gate。
+- Trellis Task：PRD、Design、Implement、Task 原生状态、阻塞、下一工程动作和证据引用。
+- Trellis workspace：跨会话工程记录，不复制项目 Gate。
+- Git、PR、runner 和目标系统：代码、评审、运行和业务结果证据。
+
+一个事实只有一个写入方。不得把 `current_gate` 或 Gate 历史复制到 `task.json`、Task notes、`progress.md`、workspace journal、Base 或 `.rpa_ai/handoff`。
 
 每个 Gate 或关键里程碑完成时，AI 应先显式询问：
 
 ```text
-当前 Gate 是否验收通过，并记录到 Trellis？
+当前 Gate 是否验收通过，并记录到 Project Gate Controller？
 ```
 
-用户确认后，先更新并回读 Trellis 本地进度，再推进到下一 Gate。配置了项目管理 Base 时，再询问是否同时同步 Base 的 `当前Gate`、`下一步建议` 和对应里程碑事件。
+用户确认后，先调用 Project Gate Controller 关闭当前 Gate，再回读 `.project-gates/project.json` 和 Gate 历史。Trellis 只更新对应工程 Task 的状态、证据、阻塞和下一动作，不写项目 Gate。配置了项目管理 Base 时，可另行生成组合摘要，但 Base 不反写 Project Gate Controller 或 Trellis。
+
+旧项目若存在 `.hermes/project.json`，不得直接 bootstrap 新状态。先使用 `migration-preview` 检查，再经明确确认执行 `migrate-project-gates --confirm-migration`；迁移不得触碰 `.hermes/plugins/` 或其他 Hermes Agent 文件。
 
 没有 Base 的项目仍可完成需求、开发、联调、验收和归档。不要因为代码、测试或 runner 已通过，就跳过本地进度记录；也不要因为缺少 Base 链接而阻塞本地闭环。
 
-`当前Gate` 表示当前等待关闭的 Gate。阻塞是独立属性：保持 Gate 不变，记录阻塞原因、责任方和解除条件，不要用一个通用“阻塞 Gate”覆盖真实进度。
+Project Gate Controller `current_gate` 表示当前等待关闭的项目 Gate。阻塞是 Trellis Task 的独立属性：保持 Project Gate 不变，在 Task 中记录阻塞原因、责任方和解除条件，不要用一个通用“阻塞 Gate”覆盖真实进度。
 
 ## Skill 在哪个环节使用
 
@@ -213,7 +219,7 @@ Responses API 代理只需将格式切换为：
 | 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，执行核心自检 |
 | 新业务接入 | `rpa-contract-business` | 先拟定 `tasks[].type`、`payload`、输出和异常语义，用户确认后再写代码 |
 | 运行失败修复 | `rpa-fix-loop` | 读取 `runner_{run_id}.json`、日志和快照，判断边界后修复并测试 |
-| 本地检查点 / Gate关闭 / 交付收尾 | `rpa-delivery-close` | 记录 Trellis 本地进度，按用户验收推进 Gate，并在配置时投影到 Base；业务验收后校准 Git、runner、影刀结果 |
+| 证据核对 / Gate关闭 / 交付收尾 | `rpa-delivery-close` | 组合读取 Trellis Task、Project Gate、Git 和 runner；按用户验收只在 Project Gate Controller 推进 Gate，并在配置时生成只读 Base 投影 |
 
 理想配合方式：
 
@@ -222,19 +228,19 @@ Responses API 代理只需将格式切换为：
 - AI 负责实现、测试、解释风险。
 - 模板负责稳定输入输出、异常语义和运行产物。
 
-交付收尾 Skill 可以读取和更新 Trellis 等外部 Harness 的任务证据，但这些工具不是模板运行依赖。`run.bat`、`runner.py` 和业务 handler 不应为了进度记录或交付归档而依赖任何 Agent 状态文件。
+交付收尾 Skill 可以读取和更新 Trellis Task 证据，并通过 Project Gate Controller 管理项目 Gate；这些工具不是模板运行依赖。`run.bat`、`runner.py` 和业务 handler 不应为了进度记录或交付归档而依赖任何 Agent 状态文件。
 
 ## 新会话如何恢复项目
 
-项目使用 Trellis 时，AI 按以下顺序恢复：
+项目使用 Trellis 和 Project Gate Controller 时，AI 按以下顺序恢复：
 
-1. 当前 task 或用户指定 task 的 `task.json`。
-2. `task.json.meta.progress` 当前快照。
-3. task 目录中 `progress.md` 的最后一个检查点。
-4. PRD、Design、Implement。
-5. 最近 Git 提交和相关 `runner_{run_id}.json`。
+1. Project Gate Controller `.project-gates/project.json` 和最新 Gate 历史事件。
+2. 当前或用户指定 Trellis Task 的 `task.json` 及原生状态。
+3. Task 的 PRD、Design、Implement、检查清单和证据引用。
+4. Trellis workspace 中最近的工程记录。
+5. 最近 Git/PR、`runner_{run_id}.json` 和业务结果。
 
-恢复后应能直接回答当前 Gate、最近完成内容、下一步、责任方、阻塞和证据。飞书 Base 可以展示这些摘要，但不是恢复项目的必要条件。
+恢复后应能分别回答项目当前 Gate，以及工程 Task 的最近完成内容、下一步、责任方、阻塞和证据。飞书 Base 可以组合展示这些摘要，但不是恢复项目的事实源。
 
 ## 初始化和升级后的自检
 
@@ -252,7 +258,7 @@ python tools\doctor.py
 
 通过后再进入业务契约阶段。若失败，优先修复自检报告中的必需文件、JSON 结构、忽略规则或本机绝对路径问题。
 
-模板不强制安装特定 Agent/Harness。使用 Trellis 时，推荐以上本地进度契约；使用其他 Harness 时应提供等价的当前快照、检查点历史和证据引用。这些工具不得成为 `run.bat`、runner 或业务代码的运行依赖。
+模板不强制安装特定 Agent/Harness。使用 Trellis 和 Project Gate Controller 时遵循以上双事实源边界；使用其他 Harness 时也必须区分项目 Gate 与工程 Task，提供等价的状态、历史和证据引用。这些工具不得成为 `run.bat`、runner 或业务代码的运行依赖。
 
 ## 最容易犯的小错误
 
@@ -265,7 +271,7 @@ python tools\doctor.py
 - 生产运行时调用 `git_controller.py` 切分支。
 - `context.env` 漏填，导致工单环境判断只能退回 Git 分支。
 - 使用 `fail_fast=false` 处理有依赖关系的任务。
-- 工作已完成，但没有更新本地 Gate、下一步和责任方。
+- 工作已完成，但没有把项目 Gate 写入 Project Gate Controller，或没有把工程下一步和责任方写入 Trellis Task。
 - 把 Base 当成唯一进度源，导致离线或无权限时无法恢复项目。
 
 ## 使用前检查

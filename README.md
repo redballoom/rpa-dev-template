@@ -65,6 +65,7 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
 | [schemas/input.schema.json](schemas/input.schema.json) | 影刀输入文件的机器可读 Schema |
+| [schemas/output.schema.json](schemas/output.schema.json) | `runner_{run_id}.json` 统一信封的机器可读 Schema |
 | [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
 | [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复、本地进度与交付收尾 |
 
@@ -84,7 +85,7 @@ run.bat {run_id} {work_dir} {input_file}
 - `rpa-project-bootstrap`：从远程模板初始化新项目。
 - `rpa-contract-business`：新业务需求进入时，先做输入输出契约，再实现 handler。
 - `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
-- `rpa-delivery-close`：记录 Trellis 本地检查点、经用户验收关闭 Gate，并在配置时投影到 Base。
+- `rpa-delivery-close`：组合核对 Trellis 工程 Task 与 Project Gate Controller 项目 Gate，经用户验收后只在 Project Gate Controller 关闭 Gate，并在配置时生成只读 Base 投影。
 
 远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
 
@@ -94,6 +95,7 @@ run.bat {run_id} {work_dir} {input_file}
 
 - `VERSION`：当前模板版本。
 - `schemas/input.schema.json`：约束影刀输入文件的基本结构。
+- `schemas/output.schema.json`：约束 runner 输出的统一控制字段，业务结果保留在 `data.results[].data`。
 - `tools/doctor.py`：初始化或升级后运行，检查必需文件、JSON、模板版本、运行产物忽略规则和本机路径污染。
 
 推荐在新项目初始化后执行：

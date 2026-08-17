@@ -222,6 +222,37 @@ def test_input_file_missing():
         pass
 
 
+def test_input_file_with_empty_tasks_is_fatal():
+    """显式输入文件没有任务时必须失败，不能把 0 个任务判为 success。"""
+    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    input_path = os.path.join(repo_path, "input_route_empty.json")
+    output_path = os.path.join(repo_path, "runner_route-empty-001.json")
+    try:
+        with open(input_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {"project": "空任务测试", "tasks": [], "context": {"env": "test"}},
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+        sf = execute(
+            run_id="route-empty-001",
+            repo_path=repo_path,
+            input_file=input_path,
+        )
+        with open(sf, "r", encoding="utf-8") as f:
+            result = json.load(f)
+        assert result["status"] == "fatal"
+        assert result["data"]["run_id"] == "route-empty-001"
+        assert "non-empty list" in result["message"]
+    finally:
+        for path in [input_path, output_path]:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 def test_input_file_with_utf8_bom():
     """UTF-8 BOM 输入文件也应被正确读取"""
     repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

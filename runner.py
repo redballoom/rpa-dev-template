@@ -156,6 +156,23 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
             project = input_data.get("project", project)
             tasks = input_data.get("tasks", [])
             context = input_data.get("context", {})
+            if not isinstance(tasks, list) or not tasks:
+                rd = {
+                    "status": "fatal",
+                    "message": "Input tasks must be a non-empty list: %s" % input_file,
+                    "data": {
+                        "run_id": run_id,
+                        "retryable": False,
+                        "log_path": "",
+                        "crash_snapshot_dir": "",
+                        "results": [],
+                        "warnings": [],
+                        "errors": [],
+                    },
+                }
+                with open(sf, "w", encoding="utf-8") as f:
+                    json.dump(rd, f, ensure_ascii=False, indent=2)
+                return sf
             context.setdefault("input_file", input_file)
         if work_dir:
             context.setdefault("work_dir", work_dir)
