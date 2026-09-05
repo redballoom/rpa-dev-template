@@ -21,14 +21,20 @@ REQUIRED_FILES = [
     "docs/OPERATION_GUIDE.md",
     "docs/SHADOWBOT_INPUT_CONTRACT.md",
     "docs/ISSUE_FIX_WORKFLOW.md",
+    "docs/PORTABLE_RUN_EVIDENCE.md",
+    "docs/examples/evidence_summary_success.json",
     "schemas/input.schema.json",
     "schemas/output.schema.json",
+    "schemas/evidence-summary.schema.json",
+    "tools/evidence.py",
 ]
 
 JSON_FILES = [
     "project.template.json",
     "schemas/input.schema.json",
     "schemas/output.schema.json",
+    "schemas/evidence-summary.schema.json",
+    "docs/examples/evidence_summary_success.json",
 ]
 
 GITIGNORE_PATTERNS = [
@@ -137,7 +143,7 @@ def _check_example_inputs(checks):
 
 def _check_canonical_repositories(checks):
     errors = []
-    for schema_name in ["input.schema.json", "output.schema.json"]:
+    for schema_name in ["input.schema.json", "output.schema.json", "evidence-summary.schema.json"]:
         schema_path = "schemas/" + schema_name
         schema = _load_json(schema_path)
         expected_id = CANONICAL_SCHEMA_PREFIX + schema_name
@@ -160,6 +166,31 @@ def _check_canonical_repositories(checks):
     )
 
 
+def _check_runtime_entrypoint(checks):
+    try:
+        batch = _read_text(ROOT / "run.bat")
+    except OSError as exc:
+        _add_check(checks, "runtime_entrypoint", False, str(exc))
+        return
+    required = [
+        "RPA_PRODUCTION_ENTRYPOINT=run.bat",
+        ".venv\\Scripts\\python.exe",
+        "RPA_PYTHON_ENV=project_venv",
+        "RPA_PYTHON_ENV=system",
+        '"%REPO_PATH%runner.py"',
+    ]
+    missing = [item for item in required if item not in batch]
+    venv_python = ROOT / ".venv" / "Scripts" / "python.exe"
+    selected = "project_venv" if venv_python.is_file() else "system_fallback"
+    _add_check(
+        checks,
+        "runtime_entrypoint",
+        not missing,
+        "run.bat, runner.py and interpreter policy are consistent (%s)" % selected
+        if not missing else "run.bat missing runtime markers: %s" % ", ".join(missing),
+    )
+
+
 def run_checks():
     checks = []
     _check_required_files(checks)
@@ -169,6 +200,7 @@ def run_checks():
     _check_portability(checks)
     _check_example_inputs(checks)
     _check_canonical_repositories(checks)
+    _check_runtime_entrypoint(checks)
     ok = all(item["ok"] for item in checks)
     return {
         "status": "ok" if ok else "failed",
@@ -179,6 +211,8 @@ def run_checks():
 
 
 def main():
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     result = run_checks()
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["status"] == "ok" else 1

@@ -36,8 +36,8 @@ run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.jso
 ```
 
 5. `runner.py` 读取输入文件，按 `tasks[].type` 路由到对应 handler。
-6. Python 把业务输出写入 `data/output/`，并生成 `runner_{run_id}.json`。
-7. 影刀读取 `runner_{run_id}.json.status`，按状态码决定继续、重试、告警或进入修复闭环。
+6. Python 把业务输出写入 `data/output/`，生成私有 `runner_{run_id}.json`，同时生成可迁移的 `evidence/runs/{run_id}.summary.json`。
+7. 影刀读取 `runner_{run_id}.json.status`，按状态码决定继续、重试、告警或进入修复闭环；交付流程引用脱敏摘要而不是复制原始 runner。
 
 ## 输入文件怎么写
 
@@ -133,6 +133,7 @@ Responses API 代理只需将格式切换为：
 注意：
 
 - 影刀只消费 `runner_{run_id}.json`，不要解析 Python 堆栈。
+- `evidence/runs/{run_id}.summary.json` 只含白名单字段，可用于跨机器复核；详见 `PORTABLE_RUN_EVIDENCE.md`。
 - `retryable_error` 和 `locked` 优先由影刀重试，不应直接让 AI 改代码。
 - `pending_fix` 才是典型的代码修复入口。
 

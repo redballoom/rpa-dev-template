@@ -38,6 +38,13 @@ def test_output_schema_repository_is_canonical():
     assert "run_id" in schema["properties"]["data"]["required"]
 
 
+def test_evidence_schema_and_runtime_entrypoint_are_canonical():
+    schema = doctor._load_json("schemas/evidence-summary.schema.json")
+    assert schema["$id"] == doctor.CANONICAL_SCHEMA_PREFIX + "evidence-summary.schema.json"
+    checks = {item["name"]: item for item in doctor.run_checks()["checks"]}
+    assert checks["runtime_entrypoint"]["ok"] is True
+
+
 def test_runtime_template_has_no_agent_workflow_dependency():
     assert not (doctor.ROOT / ".rpa_ai" / "workflow.template.json").exists()
     assert not (doctor.ROOT / "tools" / "handoff.py").exists()

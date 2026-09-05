@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "run": {
+    "run_id": "example-001",
+    "status": "success",
+    "started_at": "2026-09-05T00:00:00Z",
+    "finished_at": "2026-09-05T00:00:01Z",
+    "commit": "0000000000000000000000000000000000000000",
+    "working_tree_clean": true
+  },
+  "runtime": {
+    "entrypoint": "run.bat",
+    "interpreter": {
+      "implementation": "CPython",
+      "version": "3.12.0",
+      "executable": ".venv/Scripts/python.exe",
+      "environment": "project_venv"
+    }
+  },
+  "counts": {
+    "tasks_planned": 1,
+    "tasks_recorded": 1,
+    "succeeded": 1,
+    "skipped": 0,
+    "failed": 0,
+    "warnings": 0,
+    "errors": 0
+  },
+  "issue_groups": [],
+  "artifacts": {
+    "input": {
+      "present": true,
+      "bytes": 123,
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "runner_output": {
+      "present": true,
+      "bytes": 456,
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "sha256": "747919412831f20f07e934d007ca43215c1a445665fef9419cd087c11ac67b8a"
+  }
+}

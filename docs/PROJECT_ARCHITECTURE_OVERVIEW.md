@@ -22,6 +22,8 @@
     temp/
   logs/
   crash_snapshots/
+  evidence/
+    runs/
   docs/
   schemas/
     input.schema.json
@@ -46,6 +48,7 @@
   -> core.entry.run_tasks() 按 tasks[].type 路由
   -> 写业务输出到 data/output/
   -> 写 runner_{run_id}.json
+  -> 写 evidence/runs/{run_id}.summary.json
   -> 影刀读取 status 并分支
 ```
 

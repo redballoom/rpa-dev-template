@@ -19,10 +19,13 @@
 - 日志写入 `logs/`。
 - 系统异常快照写入 `crash_snapshots/`。
 - 影刀只依赖 `runner_{run_id}.json` 做流程分支。
+- `evidence/runs/{run_id}.summary.json` 已生成，并通过 `python tools\evidence.py` 校验。
+- 摘要只包含白名单字段；原始输入、runner、日志、snapshot 和业务输出仍未提交。
 
 ## 代码
 
 - `runner.py` 支持 `--run_id`、`--repo_path`、`--input_file`、`--work_dir`、`--project`。
+- `run.bat` 优先使用项目 `.venv`，缺失时明确记录系统 Python 回退；摘要入口标记为 `run.bat`。
 - 输入文件使用标准 `tasks` 数组格式，`type` 决定路由。
 - 业务代码不硬编码影刀临时路径。
 - 密钥、webhook、账号信息不写死在模板代码中。

@@ -94,6 +94,10 @@
         },
         "traceback": {
           "type": "string"
+        },
+        "evidence_summary_path": {
+          "type": "string",
+          "pattern": "^evidence/runs/[A-Za-z0-9._-]+\\.summary\\.json$"
         }
       },
       "additionalProperties": true

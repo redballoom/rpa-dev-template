@@ -9,6 +9,7 @@ runner.py 读取输入 → 调用 core.entry.run_tasks() → 输出 runner_{run_
   Python：加载配置 → 读取输入 → 执行业务 → 异常分类 → 输出结果 → 写日志 → 通知
 """
 import sys, os, json, argparse, traceback
+from tools.evidence import summary_path, utc_timestamp, write_summary
 
 LOCK_WAIT_SECONDS = 5
 
@@ -106,6 +107,23 @@ def _read_input_file(input_path: str):
         return None
 
 
+def _write_result(result, runner_path, repo_path, output_dir, input_file, started_at):
+    """Write the private runner result, then its portable sanitized summary."""
+    evidence_path = summary_path(output_dir, result.get("data", {}).get("run_id", "run"))
+    result.setdefault("data", {})["evidence_summary_path"] = evidence_path.relative_to(output_dir).as_posix()
+    with open(runner_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    write_summary(
+        result=result,
+        repo_path=repo_path,
+        output_dir=output_dir,
+        input_path=input_file,
+        runner_path=runner_path,
+        started_at=started_at,
+    )
+    return runner_path
+
+
 def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, project_override=None):
     """
     主执行函数。
@@ -116,6 +134,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
         input_file: 输入文件路径（input_{run_id}.json）
         output_dir: 输出目录（默认 = repo_path）
     """
+    started_at = utc_timestamp()
     if repo_path in sys.path:
         sys.path.remove(repo_path)
     sys.path.insert(0, repo_path)
@@ -131,10 +150,8 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
               "data": {"run_id": run_id, "retryable": True,
                        "log_path": "", "crash_snapshot_dir": "",
                        "results": [], "warnings": [], "errors": []}}
-        with open(sf, "w", encoding="utf-8") as f:
-            json.dump(rd, f, ensure_ascii=False, indent=2)
         print("[runner] !! Locked: %s" % repo_path)
-        return sf
+        return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
 
     try:
         # ── 读取输入 ────────────────────────────────────────
@@ -150,9 +167,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
                       "data": {"run_id": run_id, "retryable": False,
                                "log_path": "", "crash_snapshot_dir": "",
                                "results": [], "warnings": [], "errors": []}}
-                with open(sf, "w", encoding="utf-8") as f:
-                    json.dump(rd, f, ensure_ascii=False, indent=2)
-                return sf
+                return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
             project = input_data.get("project", project)
             tasks = input_data.get("tasks", [])
             context = input_data.get("context", {})
@@ -170,9 +185,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
                         "errors": [],
                     },
                 }
-                with open(sf, "w", encoding="utf-8") as f:
-                    json.dump(rd, f, ensure_ascii=False, indent=2)
-                return sf
+                return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
             context.setdefault("input_file", input_file)
         if work_dir:
             context.setdefault("work_dir", work_dir)
@@ -192,9 +205,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
                            "log_path": "", "crash_snapshot_dir": "",
                            "results": [], "warnings": [], "errors": [],
                            "config_check": config_check}}
-            with open(sf, "w", encoding="utf-8") as f:
-                json.dump(rd, f, ensure_ascii=False, indent=2)
-            return sf
+            return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
 
         # ── 执行业务 ────────────────────────────────────────
         import core.entry as em
@@ -212,8 +223,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
     finally:
         lock.release()
 
-    with open(sf, "w", encoding="utf-8") as f:
-        json.dump(rd, f, ensure_ascii=False, indent=2)
+    _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
     print("[runner] Status: %s" % sf)
     return sf
 

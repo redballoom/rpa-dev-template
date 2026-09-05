@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.entry import run_tasks
 from core.exceptions import BusinessException, SystemException, BUSINESS_CODES, SYSTEM_CATEGORIES
 from runner import _read_input_file, execute
+from tools.evidence import summary_path, validate_summary
 
 
 MOCK_ISSUE_URL = "https://linear.app/rpa-workspace/issue/RPA-MOCK/test-issue"
@@ -32,6 +33,19 @@ MOCK_AI_RESULT = {
     "need_human_review": False,
     "test_suggestion": "",
 }
+
+
+def _remove_run_artifacts(repo_path, run_id, *extra_paths):
+    paths = [
+        os.path.join(repo_path, "runner_%s.json" % run_id),
+        str(summary_path(repo_path, run_id)),
+        *extra_paths,
+    ]
+    for path in paths:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def _mock_create_issue(*a, **kw):
@@ -207,19 +221,18 @@ def test_crash_snapshot_context():
 
 def test_input_file_missing():
     """输入文件不存在 → fatal"""
+    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sf = execute(
         run_id="route-006",
-        repo_path=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        repo_path=repo_path,
         input_file="nonexistent_input.json",
     )
     with open(sf, "r", encoding="utf-8") as f:
         result = json.load(f)
     assert result["status"] == "fatal"
     assert "Input file" in result["message"]
-    try:
-        os.remove(sf)
-    except OSError:
-        pass
+    assert validate_summary(os.path.join(repo_path, result["data"]["evidence_summary_path"]))["valid"] is True
+    _remove_run_artifacts(repo_path, "route-006")
 
 
 def test_input_file_with_empty_tasks_is_fatal():
@@ -246,11 +259,7 @@ def test_input_file_with_empty_tasks_is_fatal():
         assert result["data"]["run_id"] == "route-empty-001"
         assert "non-empty list" in result["message"]
     finally:
-        for path in [input_path, output_path]:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        _remove_run_artifacts(repo_path, "route-empty-001", input_path, output_path)
 
 
 def test_input_file_with_utf8_bom():
@@ -275,12 +284,10 @@ def test_input_file_with_utf8_bom():
             result = json.load(f)
         assert result["status"] == "success"
         assert result["data"]["run_id"] == "route-bom-001"
+        evidence_path = os.path.join(repo_path, result["data"]["evidence_summary_path"])
+        assert validate_summary(evidence_path)["valid"] is True
     finally:
-        for path in [input_path, os.path.join(repo_path, "runner_route-bom-001.json")]:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
+        _remove_run_artifacts(repo_path, "route-bom-001", input_path)
 
 
 def test_exception_codes():

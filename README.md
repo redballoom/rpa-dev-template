@@ -19,6 +19,7 @@ run.bat {run_id} {work_dir} {input_file}
 默认输出：
 
 - `runner_{run_id}.json`：输出到项目根目录。
+- `evidence/runs/{run_id}.summary.json`：可提交/上传的脱敏运行摘要，包含 commit、真实入口、解释器、计数和输入/runner 哈希。
 - `logs/run_{run_id}.log`：Python 运行日志。
 - `crash_snapshots/crash_{run_id}.json`：系统异常快照。
 - `data/`：业务输入、业务输出和临时文件目录。
@@ -63,9 +64,11 @@ run.bat {run_id} {work_dir} {input_file}
 | [docs/REQUIREMENT_TEMPLATE.md](docs/REQUIREMENT_TEMPLATE.md) | 给 AI 开发业务代码时的需求模板 |
 | [docs/ISSUE_FIX_WORKFLOW.md](docs/ISSUE_FIX_WORKFLOW.md) | 运行失败后的修复闭环 |
 | [docs/ACCEPTANCE_CHECKLIST.md](docs/ACCEPTANCE_CHECKLIST.md) | 修改和上线前验收清单 |
+| [docs/PORTABLE_RUN_EVIDENCE.md](docs/PORTABLE_RUN_EVIDENCE.md) | 可迁移脱敏证据的字段白名单、哈希和复核方式 |
 | [docs/PROJECT_ARCHITECTURE_OVERVIEW.md](docs/PROJECT_ARCHITECTURE_OVERVIEW.md) | 项目结构和执行流程 |
 | [schemas/input.schema.json](schemas/input.schema.json) | 影刀输入文件的机器可读 Schema |
 | [schemas/output.schema.json](schemas/output.schema.json) | `runner_{run_id}.json` 统一信封的机器可读 Schema |
+| [schemas/evidence-summary.schema.json](schemas/evidence-summary.schema.json) | 可迁移脱敏证据摘要 Schema |
 | [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
 | [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复、本地进度与交付收尾 |
 
@@ -75,8 +78,9 @@ run.bat {run_id} {work_dir} {input_file}
 2. 影刀调用 `run.bat`，传入本次运行独立的 `input_file`。
 3. Python 读取输入、执行业务、写入业务输出到 `data/output/`。
 4. Python 输出 `runner_{run_id}.json`。
-5. 影刀只消费 `runner_{run_id}.json` 的 `status`、`message` 和 `data`，不直接解析 Python 堆栈。
-6. AI 后续只在 Code 项目内修改 Python 业务代码、测试和文档，默认不改影刀 UI 流程。
+5. Python 同时输出 `evidence/runs/{run_id}.summary.json`；原始 runner 保持私有，摘要可用于跨机器复核。
+6. 影刀只消费 `runner_{run_id}.json` 的 `status`、`message` 和 `data`，不直接解析 Python 堆栈。
+7. AI 后续只在 Code 项目内修改 Python 业务代码、测试和文档，默认不改影刀 UI 流程。
 
 ## 配套 Skills
 
@@ -96,6 +100,7 @@ run.bat {run_id} {work_dir} {input_file}
 - `VERSION`：当前模板版本。
 - `schemas/input.schema.json`：约束影刀输入文件的基本结构。
 - `schemas/output.schema.json`：约束 runner 输出的统一控制字段，业务结果保留在 `data.results[].data`。
+- `schemas/evidence-summary.schema.json`：封闭白名单的可迁移运行证据契约。
 - `tools/doctor.py`：初始化或升级后运行，检查必需文件、JSON、模板版本、运行产物忽略规则和本机路径污染。
 
 推荐在新项目初始化后执行：

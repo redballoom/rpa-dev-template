@@ -63,6 +63,7 @@
 
 6. 保持输出协议稳定
    - 最终必须输出 `runner_{run_id}.json`。
+   - 同时生成 `evidence/runs/{run_id}.summary.json`；交付流程引用该脱敏摘要，不复制原始 runner。
    - 顶层字段保持 `status`、`message`、`data`。
    - `data` 中保持 `run_id`、`results`、`warnings`、`errors`、`retryable`、`crash_snapshot_dir`、`log_path`。
    - 业务结果可以追加到单个 result 的 `data` 字段中。
@@ -89,6 +90,7 @@
 - 不修改 `run.bat` 的参数契约，除非影刀调用方式同步变化。
 - 新增 `tasks[].type` 时必须同步实现 handler、示例输入和测试；不要只更新文档。
 - 不提交运行产物，例如 `runner_*.json`、`input*.json`、`logs/`、`crash_snapshots/`、`data/`。
+- `evidence/runs/*.summary.json` 是唯一允许提交的运行摘要；提交前必须执行 `python tools/evidence.py <summary>`，并遵守 `docs/PORTABLE_RUN_EVIDENCE.md` 的白名单。
 - 不提交或泄露 `project.json` 中的真实密钥、webhook、Linear 或 AI 代理配置。
 
 ## 推荐实现模板
