@@ -10,8 +10,13 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from .delivery_version import delivery_version
+except ImportError:  # python tools/evidence.py
+    from delivery_version import delivery_version
 
-SCHEMA_VERSION = 1
+
+SCHEMA_VERSION = 2
 SUMMARY_RELATIVE_DIR = Path("evidence") / "runs"
 ALLOWED_TOP_LEVEL_FIELDS = {
     "schema_version",
@@ -39,7 +44,7 @@ DENIED_SOURCE_FIELDS = {
     "traceback",
 }
 ALLOWED_NESTED_FIELDS = {
-    "run": {"run_id", "status", "started_at", "finished_at", "commit", "working_tree_clean"},
+    "run": {"run_id", "status", "started_at", "finished_at", "commit", "working_tree_clean", "delivery_tree_clean"},
     "runtime": {"entrypoint", "interpreter"},
     "interpreter": {"implementation", "version", "executable", "environment"},
     "counts": {"tasks_planned", "tasks_recorded", "succeeded", "skipped", "failed", "warnings", "errors"},
@@ -183,7 +188,7 @@ def build_summary(result, repo_path, input_path, runner_path, started_at, finish
             input_data = None
 
     entrypoint = os.environ.get("RPA_PRODUCTION_ENTRYPOINT", "runner.py").strip() or "runner.py"
-    git_identity = _git_identity(repo_path)
+    version = delivery_version(repo_path)
     summary = {
         "schema_version": SCHEMA_VERSION,
         "run": {
@@ -191,8 +196,9 @@ def build_summary(result, repo_path, input_path, runner_path, started_at, finish
             "status": str(result.get("status") or "fatal"),
             "started_at": started_at,
             "finished_at": finished_at,
-            "commit": git_identity["commit"],
-            "working_tree_clean": git_identity["working_tree_clean"],
+            "commit": version["head"],
+            "working_tree_clean": version["working_tree_clean"],
+            "delivery_tree_clean": version["delivery_tree_clean"] if version["ok"] else False,
         },
         "runtime": {
             "entrypoint": entrypoint,
@@ -236,8 +242,14 @@ def validate_summary(summary_or_path):
     unexpected = sorted(set(summary) - ALLOWED_TOP_LEVEL_FIELDS)
     if unexpected:
         errors.append("unexpected top-level fields: %s" % ", ".join(unexpected))
-    if summary.get("schema_version") != SCHEMA_VERSION:
+    if summary.get("schema_version") not in (1, SCHEMA_VERSION):
         errors.append("unsupported schema_version")
+    run = summary.get("run")
+    if isinstance(run, dict):
+        if summary.get("schema_version") == 2 and not isinstance(run.get("delivery_tree_clean"), bool):
+            errors.append("delivery_tree_clean must be boolean for schema 2")
+        if summary.get("schema_version") == 1 and "delivery_tree_clean" in run:
+            errors.append("delivery_tree_clean is only available in schema 2")
     for field in ["run", "runtime", "counts", "issue_groups", "artifacts", "integrity"]:
         if field not in summary:
             errors.append("missing field: %s" % field)

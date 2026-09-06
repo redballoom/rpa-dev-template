@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "run", "runtime", "counts", "issue_groups", "artifacts", "integrity"],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "run": {
       "type": "object",
       "additionalProperties": false,
@@ -17,7 +17,8 @@
         "started_at": {"type": "string"},
         "finished_at": {"type": "string"},
         "commit": {"type": "string", "pattern": "^([0-9a-fA-F]{40})?$"},
-        "working_tree_clean": {"type": "boolean"}
+        "working_tree_clean": {"type": "boolean"},
+        "delivery_tree_clean": {"type": "boolean"}
       }
     },
     "runtime": {
@@ -87,6 +88,13 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": 2}}},
+      "then": {"properties": {"run": {"required": ["delivery_tree_clean"]}}},
+      "else": {"properties": {"run": {"not": {"required": ["delivery_tree_clean"]}}}}
+    }
+  ],
   "$defs": {
     "artifact": {
       "type": "object",

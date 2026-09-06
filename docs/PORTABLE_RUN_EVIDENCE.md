@@ -50,6 +50,22 @@ doctor 会核对 BAT 的项目虚拟环境选择策略、`runner.py` 路径和�
 python tools\evidence.py evidence\runs\{run_id}.summary.json
 ```
 
-返回 `valid=true` 且 `run.working_tree_clean=true`，才能把该文件作为精确 commit 的交付证据引用。若本机仍保留输入或 runner，可再将其 SHA-256 与 `artifacts` 中记录的值比对。
+返回 `valid=true` 只证明摘要的格式、白名单与完整性，不证明当前代码可交付。若本机仍保留输入或 runner，可再将其 SHA-256 与 `artifacts` 中记录的值比对。
+
+## 版本与重复运行（Schema 2）
+
+Schema 2 保留精确的 `run.commit` 和原始 Git `run.working_tree_clean`，新增 `run.delivery_tree_clean`。后者只允许以下记录文件变化：
+
+- `.project-gates/project.json`、`.project-gates/gate-history.md`；
+- `.trellis/tasks/`、`.trellis/workspace/` 下的 `.md`、`.json`、`.jsonl` 记录；
+- `evidence/runs/` 下直接存放的 `*.summary.json`。
+
+其他文件一律视为交付内容，包括脚本、Spec、Skill 指令、配置、依赖、契约以及未知文件。生成的摘要不会污染下一次运行的交付清洁度，但原始工作树状态仍如实记录。被 Git 忽略的本地配置和业务输入不属于该代码版本检查的证明范围。
+
+Controller 的 `evidence-check` 将历史有效性 `valid` 与当前交付就绪 `delivery_ready` 分开报告。就绪要求摘要合法、运行成功或 warning、运行时交付代码干净、入口为 `run.bat`，同时摘要 commit 是当前 HEAD 的祖先，所有后续提交都只改记录，当前工作区也只改记录。中间代码修改后又回滚也会要求重新验证。只提交摘要或治理记录不会使已有运行证据失效。
+
+旧 Schema 1 仍可读取，其运行时清洁度继续使用原 `working_tree_clean`，不会把旧的脏工作树运行升级为合格证据。Schema 2 必须使用支持新版本的 Controller；旧 Controller 拒绝未知版本，不能混装发布。
+
+以上检查不替代 PR review、影刀真实调用证据或业务输出回读。`warning` 是否符合业务验收仍需独立判断。
 
 已脱敏样例见 `docs/examples/evidence_summary_success.json`，机器可读契约见 `schemas/evidence-summary.schema.json`。
