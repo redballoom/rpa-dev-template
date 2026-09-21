@@ -47,6 +47,18 @@ def test_feishu_post_skips_when_webhook_missing():
         notifier.FEISHU_WEBHOOK = original
 
 
+def test_feishu_disabled_never_sends_even_with_webhook():
+    originals = (notifier.FEISHU_ENABLED, notifier.FEISHU_WEBHOOK)
+    try:
+        notifier.FEISHU_ENABLED = False
+        notifier.FEISHU_WEBHOOK = "https://example.invalid/webhook"
+        with patch("core.notifier.requests.post") as mock_post:
+            assert notifier._feishu_post({"msg_type": "text"}) is True
+            mock_post.assert_not_called()
+    finally:
+        notifier.FEISHU_ENABLED, notifier.FEISHU_WEBHOOK = originals
+
+
 def test_linear_issue_skips_when_config_missing_in_prod():
     """生产环境但 Linear 关键配置缺失时明确跳过，避免空配置网络请求"""
     original_key = notifier.LINEAR_API_KEY
@@ -67,3 +79,20 @@ def test_linear_issue_skips_when_config_missing_in_prod():
     finally:
         notifier.LINEAR_API_KEY = original_key
         notifier.LINEAR_TEAM_ID = original_team
+
+
+def test_linear_disabled_never_sends_even_with_credentials():
+    originals = (notifier.LINEAR_ENABLED, notifier.LINEAR_API_KEY, notifier.LINEAR_TEAM_ID)
+    try:
+        notifier.LINEAR_ENABLED = False
+        notifier.LINEAR_API_KEY = "key"
+        notifier.LINEAR_TEAM_ID = "team"
+        with patch("core.notifier.requests.post") as mock_post:
+            result = notifier.create_linear_issue(
+                error_msg="boom", trace="", payload_data={}, repo_path=".",
+                run_context={"env": "prod"},
+            )
+            assert result == {"success": False, "issue_url": ""}
+            mock_post.assert_not_called()
+    finally:
+        notifier.LINEAR_ENABLED, notifier.LINEAR_API_KEY, notifier.LINEAR_TEAM_ID = originals

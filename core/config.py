@@ -11,6 +11,14 @@ _TEMPLATE_PATH = os.path.join(_PROJECT_ROOT, "project.template.json")
 _PROJECT_JSON_PATH = os.path.join(_PROJECT_ROOT, "project.json")
 
 
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() not in ("0", "false", "no", "off", "")
+    return bool(value)
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     """深度合并两个字典，override 的值覆盖 base"""
     result = dict(base)
@@ -58,11 +66,22 @@ _cfg = _load_merged_config()
 # ── 项目名称 ────────────────────────────────────────────────
 PROJECT = _cfg.get("project", "RPA")
 
-# ── 飞书通知 ────────────────────────────────────────────────
-FEISHU_WEBHOOK = _cfg.get("feishu_webhook", "")
+# ── 可选外部集成（默认全部关闭）────────────────────────────
+_integrations_cfg = _cfg.get("integrations", {})
+if not isinstance(_integrations_cfg, dict):
+    _integrations_cfg = {}
+
+_feishu_cfg = _integrations_cfg.get("feishu", {})
+if not isinstance(_feishu_cfg, dict):
+    _feishu_cfg = {}
+FEISHU_ENABLED = _as_bool(_feishu_cfg.get("enabled", False))
+FEISHU_WEBHOOK = _feishu_cfg.get("webhook", "")
 
 # ── Linear 工单 ─────────────────────────────────────────────
-_linear_cfg = _cfg.get("linear", {})
+_linear_cfg = _integrations_cfg.get("linear", {})
+if not isinstance(_linear_cfg, dict):
+    _linear_cfg = {}
+LINEAR_ENABLED = _as_bool(_linear_cfg.get("enabled", False))
 LINEAR_API_KEY = _linear_cfg.get("api_key", "")
 LINEAR_TEAM_ID = _linear_cfg.get("team_id", "")
 LINEAR_GRAPHQL_URL = "https://api.linear.app/graphql"
@@ -71,8 +90,10 @@ LINEAR_PROJECT_ID = _linear_cfg.get("project_id", "")
 LINEAR_ASSIGNEE_ID = _linear_cfg.get("assignee_id", "")
 
 # ── AI 分析 (OpenAI-compatible) ─────────────────────────────
-_ai_cfg = _cfg.get("ai", {})
-AI_ENABLED = _ai_cfg.get("enabled", False)
+_ai_cfg = _integrations_cfg.get("ai", {})
+if not isinstance(_ai_cfg, dict):
+    _ai_cfg = {}
+AI_ENABLED = _as_bool(_ai_cfg.get("enabled", False))
 AI_BASE_URL = _ai_cfg.get("base_url", "")
 AI_API_KEY = _ai_cfg.get("api_key", "")
 AI_MODEL = _ai_cfg.get("model", "")
@@ -89,12 +110,7 @@ AI_API_FORMATS = ("chat_completions", "responses")
 # ── 配置校验 ────────────────────────────────────────────────
 
 # 关键字段定义：(config 变量名, 字段中文描述, 是否必须非空)
-_REQUIRED_FIELDS = [
-    ("PROJECT", "项目名称(project)", True),
-    ("FEISHU_WEBHOOK", "飞书 Webhook(feishu_webhook)", False),
-    ("LINEAR_API_KEY", "Linear API Key(linear.api_key)", False),
-    ("LINEAR_TEAM_ID", "Linear Team ID(linear.team_id)", False),
-]
+_REQUIRED_FIELDS = [("PROJECT", "项目名称(project)", True)]
 
 
 def validate_config() -> dict:
@@ -119,7 +135,13 @@ def validate_config() -> dict:
                 missing.append("%s (%s)" % (desc, var_name))
             else:
                 warnings.append("%s 未配置 (%s)" % (desc, var_name))
-    # AI 启用但缺 API Key
+    if FEISHU_ENABLED and not FEISHU_WEBHOOK:
+        warnings.append("飞书通知已启用但 Webhook 未配置 (integrations.feishu.webhook)")
+    if LINEAR_ENABLED and not LINEAR_API_KEY:
+        warnings.append("Linear 已启用但 API Key 未配置 (integrations.linear.api_key)")
+    if LINEAR_ENABLED and not LINEAR_TEAM_ID:
+        warnings.append("Linear 已启用但 Team ID 未配置 (integrations.linear.team_id)")
+    # AI 启用但连接参数不完整
     if AI_ENABLED and not AI_API_KEY:
         warnings.append("AI 分析已启用但 API Key 未配置 (AI_API_KEY)")
     if AI_ENABLED and not AI_BASE_URL:
@@ -157,11 +179,11 @@ if _cfg:
     if os.path.exists(_PROJECT_JSON_PATH):
         src.append("project.json")
     print("[config] OK: loaded from %s (project: %s)" % ("+".join(src), PROJECT))
-    if AI_ENABLED and AI_API_KEY:
-        print("[config] AI analysis: enabled (model: %s)" % AI_MODEL)
-    elif AI_ENABLED and not AI_API_KEY:
-        print("[config] AI analysis: enabled but no API key set")
-    else:
-        print("[config] AI analysis: disabled")
+    print(
+        "[config] integrations: feishu=%s, linear=%s, ai=%s"
+        % ("enabled" if FEISHU_ENABLED else "disabled",
+           "enabled" if LINEAR_ENABLED else "disabled",
+           "enabled" if AI_ENABLED else "disabled")
+    )
 else:
     print("[config] WARN: no config found, using defaults")

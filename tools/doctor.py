@@ -7,17 +7,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_TEMPLATE_REPO = "https://github.com/redballoom/rpa-dev-template"
-CANONICAL_SKILLS_REPO = "https://github.com/redballoom/rpa-dev-template-skills"
 CANONICAL_SCHEMA_PREFIX = CANONICAL_TEMPLATE_REPO + "/schemas/"
 
 REQUIRED_FILES = [
     "VERSION",
     "README.md",
+    "ARCHITECTURE.md",
     "AGENTS.md",
     "project.template.json",
     "runner.py",
     "run.bat",
     "core/entry.py",
+    "core/handlers/__init__.py",
+    "core/services/__init__.py",
+    "core/infrastructure/files.py",
     "docs/OPERATION_GUIDE.md",
     "docs/SHADOWBOT_INPUT_CONTRACT.md",
     "docs/ISSUE_FIX_WORKFLOW.md",
@@ -131,7 +134,9 @@ def _check_example_inputs(checks):
     errors = []
     for path in examples:
         try:
-            json.loads(path.read_text(encoding="utf-8-sig"))
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            if data.get("schema_version") != "1.0":
+                errors.append("%s: schema_version must be 1.0" % path.name)
         except json.JSONDecodeError as exc:
             errors.append("%s: %s" % (path.name, exc))
     ok = bool(examples) and not errors
@@ -150,19 +155,11 @@ def _check_canonical_repositories(checks):
         if schema.get("$id") != expected_id:
             errors.append("%s $id=%s" % (schema_path, schema.get("$id")))
 
-    combined = ""
-    for item in ["README.md", "AGENTS.md", "docs/OPERATION_GUIDE.md"]:
-        path = ROOT / item
-        if path.exists():
-            combined += _read_text(path)
-    if CANONICAL_SKILLS_REPO not in combined:
-        errors.append("canonical skills repository is not documented")
-
     _add_check(
         checks,
         "canonical_repositories",
         not errors,
-        "template and skills repository references are canonical" if not errors else "; ".join(errors),
+        "schema repository references are canonical" if not errors else "; ".join(errors),
     )
 
 
@@ -176,12 +173,14 @@ def _check_runtime_entrypoint(checks):
         "RPA_PRODUCTION_ENTRYPOINT=run.bat",
         ".venv\\Scripts\\python.exe",
         "RPA_PYTHON_ENV=project_venv",
-        "RPA_PYTHON_ENV=system",
+        "project virtualenv not found",
+        'if "%WORK_DIR%"==""',
+        'if "%INPUT_FILE%"==""',
         '"%REPO_PATH%runner.py"',
     ]
     missing = [item for item in required if item not in batch]
     venv_python = ROOT / ".venv" / "Scripts" / "python.exe"
-    selected = "project_venv" if venv_python.is_file() else "system_fallback"
+    selected = "project_venv" if venv_python.is_file() else "missing_project_venv"
     _add_check(
         checks,
         "runtime_entrypoint",

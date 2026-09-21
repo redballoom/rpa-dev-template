@@ -11,12 +11,12 @@
   "properties": {
     "status": {
       "type": "string",
+      "description": "运行状态。retryable_error 表示错误具有暂时性，不代表整个 tasks[] 可安全重放。",
       "enum": [
         "success",
         "warning",
         "retryable_error",
         "pending_fix",
-        "failed",
         "locked",
         "fatal"
       ]
@@ -81,7 +81,8 @@
           }
         },
         "retryable": {
-          "type": "boolean"
+          "type": "boolean",
+          "description": "错误性质提示，不是调度层自动重放整个运行的授权。"
         },
         "crash_snapshot_dir": {
           "type": "string"

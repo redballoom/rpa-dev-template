@@ -6,12 +6,14 @@ runner.py 读取输入 → 调用 core.entry.run_tasks() → 输出 runner_{run_
 
 职责边界：
   影刀：组织输入参数 → 调用 run.bat → 读取结果 JSON → 按 status 分支
-  Python：加载配置 → 读取输入 → 执行业务 → 异常分类 → 输出结果 → 写日志 → 通知
+  Python：加载配置 → 读取输入 → 执行业务 → 异常分类 → 输出结果 → 写日志
+  可选集成：飞书通知、Linear 工单、AI 分析默认关闭，仅显式启用时执行
 """
 import sys, os, json, argparse, traceback
 from tools.evidence import summary_path, utc_timestamp, write_summary
 
 LOCK_WAIT_SECONDS = 5
+INPUT_SCHEMA_VERSION = "1.0"
 
 try:
     if hasattr(sys.stdout, 'encoding') and sys.stdout.encoding and sys.stdout.encoding.upper() == "GBK":
@@ -85,6 +87,41 @@ class _FileLock:
         self._acquired = False
 
 
+def _validate_input_contract(data):
+    """Validate the stable ShadowBot-to-Python envelope without extra dependencies."""
+    errors = []
+    if data.get("schema_version") != INPUT_SCHEMA_VERSION:
+        errors.append("schema_version must be %s" % INPUT_SCHEMA_VERSION)
+
+    project = data.get("project")
+    if not isinstance(project, str) or not project.strip():
+        errors.append("project must be a non-empty string")
+
+    tasks = data.get("tasks")
+    if not isinstance(tasks, list) or not tasks:
+        errors.append("tasks must be a non-empty list")
+        return errors
+
+    for index, task in enumerate(tasks):
+        prefix = "tasks[%d]" % index
+        if not isinstance(task, dict):
+            errors.append("%s must be an object" % prefix)
+            continue
+        if "id" not in task or isinstance(task.get("id"), bool) or not isinstance(task.get("id"), (str, int)):
+            errors.append("%s.id must be a string or integer" % prefix)
+        if not isinstance(task.get("name"), str) or not task.get("name", "").strip():
+            errors.append("%s.name must be a non-empty string" % prefix)
+        if not isinstance(task.get("type"), str) or not task.get("type", "").strip():
+            errors.append("%s.type must be a non-empty string" % prefix)
+        if not isinstance(task.get("payload"), dict):
+            errors.append("%s.payload must be an object" % prefix)
+
+    context = data.get("context")
+    if context is not None and not isinstance(context, dict):
+        errors.append("context must be an object")
+    return errors
+
+
 def _read_input_file(input_path: str):
     """
     读取标准输入文件 input_{run_id}.json。
@@ -100,6 +137,10 @@ def _read_input_file(input_path: str):
         # 基本校验
         if not isinstance(data, dict):
             print("[runner] ERROR: input file is not a JSON object")
+            return None
+        contract_errors = _validate_input_contract(data)
+        if contract_errors:
+            print("[runner] ERROR: input contract invalid: %s" % "; ".join(contract_errors))
             return None
         return data
     except (json.JSONDecodeError, IOError) as e:
@@ -131,7 +172,7 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
     Args:
         run_id:     运行 ID（影刀生成）
         repo_path:  仓库路径
-        input_file: 输入文件路径（input_{run_id}.json）
+        input_file: 输入文件路径（必填，input_{run_id}.json）
         output_dir: 输出目录（默认 = repo_path）
     """
     started_at = utc_timestamp()
@@ -155,45 +196,32 @@ def execute(run_id, repo_path, input_file=None, output_dir=None, work_dir=None, 
 
     try:
         # ── 读取输入 ────────────────────────────────────────
-        project = project_override or "dev-template"
-        tasks = []
-        context = {}
+        if not input_file:
+            rd = {"status": "fatal", "message": "Input file is required",
+                  "data": {"run_id": run_id, "retryable": False,
+                           "log_path": "", "crash_snapshot_dir": "",
+                           "results": [], "warnings": [], "errors": []}}
+            return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
 
-        if input_file:
-            input_data = _read_input_file(input_file)
-            if input_data is None:
-                # 输入文件不存在或非法 → fatal
-                rd = {"status": "fatal", "message": "Input file invalid: %s" % input_file,
-                      "data": {"run_id": run_id, "retryable": False,
-                               "log_path": "", "crash_snapshot_dir": "",
-                               "results": [], "warnings": [], "errors": []}}
-                return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
-            project = input_data.get("project", project)
-            tasks = input_data.get("tasks", [])
-            context = input_data.get("context", {})
-            if not isinstance(tasks, list) or not tasks:
-                rd = {
-                    "status": "fatal",
-                    "message": "Input tasks must be a non-empty list: %s" % input_file,
-                    "data": {
-                        "run_id": run_id,
-                        "retryable": False,
-                        "log_path": "",
-                        "crash_snapshot_dir": "",
-                        "results": [],
-                        "warnings": [],
-                        "errors": [],
-                    },
-                }
-                return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
-            context.setdefault("input_file", input_file)
+        input_data = _read_input_file(input_file)
+        if input_data is None:
+            # 输入文件不存在、格式非法或不符合契约 → fatal
+            rd = {"status": "fatal", "message": "Input file invalid: %s" % input_file,
+                  "data": {"run_id": run_id, "retryable": False,
+                           "log_path": "", "crash_snapshot_dir": "",
+                           "results": [], "warnings": [], "errors": []}}
+            return _write_result(rd, sf, repo_path, output_dir, input_file, started_at)
+
+        project = input_data["project"]
+        tasks = input_data["tasks"]
+        context = input_data.get("context") or {}
+        context.setdefault("input_file", input_file)
         if work_dir:
             context.setdefault("work_dir", work_dir)
 
         # ── 配置统一从 core.config 加载 ────────────────────
         from core.config import PROJECT
-        if not input_file:
-            project = project_override or project or PROJECT
+        project = project or project_override or PROJECT
 
         # ── 运行前配置自检 ───────────────────────────────
         from core.config import validate_config
@@ -232,9 +260,9 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Yingdao RPA -> Python scheduler")
     p.add_argument("--run_id", required=True, help="运行 ID（影刀生成）")
     p.add_argument("--repo_path", required=True, help="仓库绝对路径")
-    p.add_argument("--input_file", default="", help="输入文件路径 input_{run_id}.json")
+    p.add_argument("--input_file", required=True, help="输入文件路径 input_{run_id}.json")
     p.add_argument("--output_dir", default="", help="输出目录（默认=repo_path）")
-    p.add_argument("--work_dir", default="", help="影刀本次运行工作目录")
+    p.add_argument("--work_dir", required=True, help="影刀本次运行工作目录")
     p.add_argument("--project", default="", help="影刀或 run.bat 传入的项目名")
     a = p.parse_args()
     st = execute(

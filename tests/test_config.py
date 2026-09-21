@@ -17,6 +17,8 @@ def test_config_loaded():
     # 默认模板有 project 字段
     assert hasattr(config, "PROJECT")
     assert hasattr(config, "AI_ENABLED")
+    assert hasattr(config, "FEISHU_ENABLED")
+    assert hasattr(config, "LINEAR_ENABLED")
     assert hasattr(config, "AI_BASE_URL")
     assert hasattr(config, "AI_API_KEY")
     assert hasattr(config, "AI_API_FORMAT")
@@ -72,6 +74,35 @@ def test_validate_config_ai_warning():
     finally:
         cfg.AI_ENABLED = original_enabled
         cfg.AI_API_KEY = original_key
+
+
+def test_optional_integrations_are_disabled_by_default():
+    from core import config
+    assert config.FEISHU_ENABLED is False
+    assert config.LINEAR_ENABLED is False
+    assert config.AI_ENABLED is False
+
+
+def test_enabled_integrations_validate_their_own_credentials():
+    import core.config as cfg
+    originals = (
+        cfg.FEISHU_ENABLED, cfg.FEISHU_WEBHOOK,
+        cfg.LINEAR_ENABLED, cfg.LINEAR_API_KEY, cfg.LINEAR_TEAM_ID,
+    )
+    try:
+        cfg.FEISHU_ENABLED = True
+        cfg.FEISHU_WEBHOOK = ""
+        cfg.LINEAR_ENABLED = True
+        cfg.LINEAR_API_KEY = ""
+        cfg.LINEAR_TEAM_ID = ""
+        warnings = cfg.validate_config()["warnings"]
+        assert any("飞书通知已启用" in item for item in warnings)
+        assert any("Linear 已启用" in item for item in warnings)
+    finally:
+        (
+            cfg.FEISHU_ENABLED, cfg.FEISHU_WEBHOOK,
+            cfg.LINEAR_ENABLED, cfg.LINEAR_API_KEY, cfg.LINEAR_TEAM_ID,
+        ) = originals
 
 
 def test_validate_config_ai_connection_warnings():

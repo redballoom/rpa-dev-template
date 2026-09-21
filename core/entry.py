@@ -1,8 +1,8 @@
 """
 core/entry.py — 业务执行入口
 =============================
-统一输出协议（7 种状态码）：
-  success | warning | retryable_error | pending_fix | failed | locked | fatal
+统一输出协议（6 种状态码）：
+  success | warning | retryable_error | pending_fix | locked | fatal
 """
 import json, os, traceback
 from core.exceptions import BusinessException, SystemException
@@ -23,10 +23,11 @@ def run_tasks(run_id, project="dev-template", tasks=None, context=None, repo_pat
     """
     if tasks is None:
         tasks = []
-    if context is None:
-        context = {}
-    context.setdefault("repo_path", repo_path)
-    context.setdefault("project", project)
+    context = dict(context or {})
+    # repo_path/project/run_id are trusted runtime values, not input overrides.
+    context["repo_path"] = os.path.abspath(repo_path)
+    context["project"] = project
+    context["run_id"] = run_id
     fail_fast = _as_bool(context.get("fail_fast", True))
 
     logger = RunLogger(run_id, repo_path)
@@ -151,8 +152,7 @@ def _determine_status(errors, warnings, success_count, total):
     语义说明：
       pending_fix:  只要出现不可重试的系统异常 → 待修复
                    不再依赖 issue_url（工单创建可能失败），状态码由错误本身决定
-      retryable_error: 系统异常且可重试
-      failed:  保留给 runner 级别的崩溃（execute() 中使用），不在 run_tasks 中产生
+      retryable_error: 系统异常具有暂时性；不授权调度层自动重放整个运行
     """
     if errors:
         has_non_retryable = any(not e.get("retryable") for e in errors)
@@ -192,7 +192,8 @@ def _process_single_task(task, project, context=None):
         )
 
     if task_type == "calc_summary":
-        return _process_calc_summary(task, context or {})
+        from core.handlers.calc_summary import process_calc_summary
+        return process_calc_summary(task, context or {})
 
     if task_type and task_type != "template_demo":
         raise SystemException(
@@ -212,76 +213,8 @@ def _process_single_task(task, project, context=None):
             run_context=context or {},
         )
 
-    # ── 示例：模拟不同异常场景 ──
-    # type=template_demo 仅用于模板状态码演示。
-    if tid and isinstance(tid, (int, float)) and tid == -2:
-        # retryable 系统异常（如网络超时）
-        raise SystemException(
-            message="Connection timeout", project=project,
-            payload={"id": tid, "name": tn},
-            action="调用外部API", expected="返回200", actual="ConnectionTimeout",
-            code="NETWORK_TIMEOUT", exc_category="DEPENDENCY_FAILURE",
-            retryable=True, run_context=context or {},
-        )
-    if tid and isinstance(tid, (int, float)) and tid < 0:
-        raise BusinessException(
-            "Invalid ID: %d" % tid, project=project,
-            context={"id": tid, "name": tn},
-            code="DATA_INVALID",
-            suggested_action="跳过此任务并记录",
-        )
-    if tid == 0:
-        raise SystemException(
-            message="task_id=0 invalid", project=project,
-            payload={"id": tid, "name": tn},
-            action="Execute [%s]" % tn, expected="positive task_id",
-            actual="got task_id=0, abort",
-            code="DATA_INVALID", exc_category="DATA_QUALITY",
-            run_context=context or {},
-        )
-    return {"processed": tid}
-
-
-def _process_calc_summary(task, context):
-    payload = task.get("payload") or {}
-    numbers = payload.get("numbers", [])
-    if not isinstance(numbers, list) or not numbers:
-        raise BusinessException(
-            "payload.numbers is empty", project=context.get("project", "RPA"),
-            context={"payload": payload}, code="DATA_EMPTY",
-            suggested_action="请在输入文件的 payload.numbers 中传入数字列表",
-        )
-
-    try:
-        values = [float(item) for item in numbers]
-    except (TypeError, ValueError):
-        raise BusinessException(
-            "payload.numbers contains non-numeric value", project=context.get("project", "RPA"),
-            context={"numbers": numbers}, code="DATA_INVALID",
-            suggested_action="请确保 payload.numbers 中的值均为数字",
-        )
-
-    total = sum(values)
-    summary = {
-        "count": len(values),
-        "sum": total,
-        "average": total / len(values),
-        "min": min(values),
-        "max": max(values),
-    }
-
-    repo_path = context.get("repo_path") or "."
-    output_file = payload.get("output_file") or "data/output/calc_result.json"
-    output_path = output_file
-    if not os.path.isabs(output_path):
-        output_path = os.path.join(repo_path, output_path)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False, indent=2)
-
-    result = dict(summary)
-    result["output_file"] = output_file
-    return result
+    from core.handlers.template_demo import process_template_demo
+    return process_template_demo(task, context or {})
 
 
 if __name__ == "__main__":

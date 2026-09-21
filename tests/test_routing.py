@@ -10,6 +10,7 @@ tests/test_routing.py — 全链路集成测试
 import sys
 import os
 import json
+from functools import wraps
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -61,13 +62,12 @@ def _mock_send_summary(*a, **kw):
 
 
 def with_mocks(func):
+    @wraps(func)
     @patch("core.entry.send_execution_summary", _mock_send_summary)
     @patch("core.ai_analyzer.analyze_crash", _mock_analyze)
     @patch("core.exceptions.create_linear_issue", _mock_create_issue)
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
-    wrapper.__name__ = func.__name__
-    wrapper.__doc__ = func.__doc__
     return wrapper
 
 
@@ -176,6 +176,44 @@ def test_unknown_task_type_pending_fix():
 
 
 @with_mocks
+def test_input_context_cannot_override_trusted_repo_path(tmp_path):
+    output = tmp_path / "repo" / "data" / "output" / "safe.json"
+    result = run_tasks(
+        run_id="trusted-path-001",
+        project="测试",
+        repo_path=str(tmp_path / "repo"),
+        context={"repo_path": str(tmp_path / "attacker")},
+        tasks=[{
+            "id": "calc-safe",
+            "name": "安全路径",
+            "type": "calc_summary",
+            "payload": {"numbers": [1, 2], "output_file": "data/output/safe.json"},
+        }],
+    )
+    assert result["status"] == "success"
+    assert output.exists()
+    assert not (tmp_path / "attacker" / "data" / "output" / "safe.json").exists()
+
+
+@with_mocks
+def test_calc_summary_rejects_output_path_escape(tmp_path):
+    result = run_tasks(
+        run_id="path-escape-001",
+        project="测试",
+        repo_path=str(tmp_path),
+        tasks=[{
+            "id": "calc-escape",
+            "name": "越界输出",
+            "type": "calc_summary",
+            "payload": {"numbers": [1], "output_file": "outside.json"},
+        }],
+    )
+    assert result["status"] == "warning"
+    assert result["data"]["warnings"][0]["code"] == "DATA_INVALID"
+    assert not (tmp_path / "outside.json").exists()
+
+
+@with_mocks
 def test_missing_task_type_pending_fix():
     """缺失 type 违反输入契约，不能假成功"""
     result = run_tasks(
@@ -243,7 +281,7 @@ def test_input_file_with_empty_tasks_is_fatal():
     try:
         with open(input_path, "w", encoding="utf-8") as f:
             json.dump(
-                {"project": "空任务测试", "tasks": [], "context": {"env": "test"}},
+                {"schema_version": "1.0", "project": "空任务测试", "tasks": [], "context": {"env": "test"}},
                 f,
                 ensure_ascii=False,
                 indent=2,
@@ -257,7 +295,7 @@ def test_input_file_with_empty_tasks_is_fatal():
             result = json.load(f)
         assert result["status"] == "fatal"
         assert result["data"]["run_id"] == "route-empty-001"
-        assert "non-empty list" in result["message"]
+        assert "Input file invalid" in result["message"]
     finally:
         _remove_run_artifacts(repo_path, "route-empty-001", input_path, output_path)
 
@@ -267,9 +305,10 @@ def test_input_file_with_utf8_bom():
     repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     input_path = os.path.join(repo_path, "input_route_bom.json")
     payload = {
+        "schema_version": "1.0",
         "run_id": "route-bom-from-input-should-be-ignored",
         "project": "BOM测试",
-        "tasks": [{"id": 1, "name": "正常任务", "type": "template_demo"}],
+        "tasks": [{"id": 1, "name": "正常任务", "type": "template_demo", "payload": {}}],
         "context": {"operator": "pytest", "env": "test", "source": "bom"},
     }
     try:
@@ -288,6 +327,46 @@ def test_input_file_with_utf8_bom():
         assert validate_summary(evidence_path)["valid"] is True
     finally:
         _remove_run_artifacts(repo_path, "route-bom-001", input_path)
+
+
+def test_missing_input_file_argument_is_fatal():
+    """生产契约要求独立输入文件，不能把空任务运行判为成功。"""
+    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sf = execute(run_id="route-no-input-001", repo_path=repo_path)
+    try:
+        with open(sf, "r", encoding="utf-8") as f:
+            result = json.load(f)
+        assert result["status"] == "fatal"
+        assert result["message"] == "Input file is required"
+    finally:
+        _remove_run_artifacts(repo_path, "route-no-input-001")
+
+
+def test_unsupported_input_schema_version_is_fatal():
+    repo_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    input_path = os.path.join(repo_path, "input_route_bad_schema.json")
+    try:
+        with open(input_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "schema_version": "0.9",
+                    "project": "旧契约",
+                    "tasks": [{"id": "t1", "name": "测试", "type": "template_demo", "payload": {}}],
+                },
+                f,
+                ensure_ascii=False,
+            )
+        sf = execute(
+            run_id="route-bad-schema-001",
+            repo_path=repo_path,
+            input_file=input_path,
+        )
+        with open(sf, "r", encoding="utf-8") as f:
+            result = json.load(f)
+        assert result["status"] == "fatal"
+        assert "Input file invalid" in result["message"]
+    finally:
+        _remove_run_artifacts(repo_path, "route-bad-schema-001", input_path)
 
 
 def test_exception_codes():

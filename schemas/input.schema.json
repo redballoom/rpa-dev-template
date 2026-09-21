@@ -4,10 +4,15 @@
   "title": "ShadowBot RPA Input",
   "type": "object",
   "required": [
+    "schema_version",
     "project",
     "tasks"
   ],
   "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
     "project": {
       "type": "string",
       "minLength": 1
@@ -18,13 +23,21 @@
       "items": {
         "type": "object",
         "required": [
+          "id",
+          "name",
           "type",
           "payload"
         ],
         "properties": {
-          "id": {},
+          "id": {
+            "oneOf": [
+              {"type": "string"},
+              {"type": "integer"}
+            ]
+          },
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "type": {
             "type": "string",
@@ -61,6 +74,21 @@
           "type": "string"
         },
         "app_name": {
+          "type": "string"
+        },
+        "account_name": {
+          "type": "string"
+        },
+        "trigger_mode": {
+          "type": "string",
+          "enum": [
+            "dev",
+            "manual",
+            "schedule",
+            "assistant"
+          ]
+        },
+        "repo_path": {
           "type": "string"
         },
         "fail_fast": {

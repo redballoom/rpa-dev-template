@@ -1,20 +1,26 @@
 {
     "project": "开发模板",
-    "version": "2.0.0",
-    "feishu_webhook": "",
-    "linear": {
-        "api_key": "",
-        "team_id": "",
-        "project_name": "",
-        "project_id": "",
-        "assignee_id": ""
-    },
-    "ai": {
-        "enabled": false,
-        "base_url": "https://api.openai.com/v1",
-        "api_key": "",
-        "model": "",
-        "api_format": "chat_completions",
-        "timeout": 30
+    "version": "0.4.0",
+    "integrations": {
+        "feishu": {
+            "enabled": false,
+            "webhook": ""
+        },
+        "linear": {
+            "enabled": false,
+            "api_key": "",
+            "team_id": "",
+            "project_name": "",
+            "project_id": "",
+            "assignee_id": ""
+        },
+        "ai": {
+            "enabled": false,
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "",
+            "model": "",
+            "api_format": "chat_completions",
+            "timeout": 30
+        }
     }
 }

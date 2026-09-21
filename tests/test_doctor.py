@@ -26,15 +26,26 @@ def test_doctor_checks_example_inputs():
     assert checks["example_inputs"]["ok"] is True
 
 
+def test_example_inputs_match_runtime_contract():
+    from runner import _validate_input_contract
+
+    for path in sorted((doctor.ROOT / "docs" / "examples").glob("input_*.json")):
+        relative_path = path.relative_to(doctor.ROOT).as_posix()
+        assert _validate_input_contract(doctor._load_json(relative_path)) == [], path.name
+
+
 def test_input_schema_repository_is_canonical():
     schema = doctor._load_json("schemas/input.schema.json")
     assert schema["$id"] == doctor.CANONICAL_SCHEMA_PREFIX + "input.schema.json"
+    assert "schema_version" in schema["required"]
+    assert schema["properties"]["schema_version"]["const"] == "1.0"
 
 
 def test_output_schema_repository_is_canonical():
     schema = doctor._load_json("schemas/output.schema.json")
     assert schema["$id"] == doctor.CANONICAL_SCHEMA_PREFIX + "output.schema.json"
     assert "fatal" in schema["properties"]["status"]["enum"]
+    assert "failed" not in schema["properties"]["status"]["enum"]
     assert "run_id" in schema["properties"]["data"]["required"]
 
 

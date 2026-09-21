@@ -1,289 +1,142 @@
-# 调度工作模式与人机配合说明
+# 运行与排障指南
 
-本文档用于后续使用本模板时快速对齐：影刀、Python、AI 分别做什么，调度怎么跑，哪些地方和旧约定不同，以及哪些小错误最容易踩坑。
+本文只说明环境初始化、生产调用、结果消费和常见运行问题。输入字段以 `SHADOWBOT_INPUT_CONTRACT.md` 为准，代码分层以 `DEVELOPMENT_GUIDE.md` 为准，职责边界以 `RPA_PYTHON_BOUNDARY.md` 为准。
 
-## 当前工作模式
+## 初始化运行环境
 
-本项目是影刀 RPA 调度的 Python Code 模板，不是具体业务项目。
+生产入口只使用项目虚拟环境，不回退系统 Python：
 
-整体职责：
+```bat
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
 
-- 影刀负责页面操作、登录、下载、上传、人工确认、生成输入文件、调用 `run.bat` 或 `runner.py`。
-- Python 负责读取结构化输入、执行可测试的业务逻辑、写业务输出、分类异常、生成 `runner_{run_id}.json`。
-- AI 负责在本 Code 项目内实现和维护 Python 业务 handler、测试、示例输入和文档。
+本地开发再安装测试依赖：
 
-默认原则：
+```bat
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+```
 
-- 影刀流程保持薄，不承载复杂业务规则。
-- Python 承载可复现、可测试、可沉淀的规则。
-- AI 不在未确认输入输出契约前直接写真实业务 handler。
+初始化、迁移或模板升级后执行：
 
-## 一次运行的标准流程
+```bat
+.venv\Scripts\python.exe tools\doctor.py
+```
 
-1. 影刀生成本次运行 ID，例如 `1782039800`。
-2. 影刀准备业务文件，通常放到 `data/input/`。
-3. 影刀生成本次独立输入文件，推荐命名为 `input_{run_id}.json`。
-4. 影刀调用：
+doctor 失败时，先修复必需文件、JSON、忽略规则、入口解释器或本机路径问题，再接入业务。
+
+## 生产调用
+
+影刀生成独立输入文件后调用：
 
 ```bat
 run.bat {run_id} {work_dir} {input_file}
 ```
 
+三个位置参数均为必填。`run_id` 不写入输入 JSON；输入信封必须包含 `schema_version: "1.0"` 和非空 `tasks[]`。
+
 示例：
 
 ```bat
-run.bat rpa_20260619_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260619_001.json
+run.bat rpa_20260921_001 C:\RPA\Demo\data C:\RPA\Demo\input_rpa_20260921_001.json
 ```
 
-5. `runner.py` 读取输入文件，按 `tasks[].type` 路由到对应 handler。
-6. Python 把业务输出写入 `data/output/`，生成私有 `runner_{run_id}.json`，同时生成可迁移的 `evidence/runs/{run_id}.summary.json`。
-7. 影刀读取 `runner_{run_id}.json.status`，按状态码决定继续、重试、告警或进入修复闭环；交付流程引用脱敏摘要而不是复制原始 runner。
+本地诊断使用同一输入契约，但不作为生产入口：
 
-## 输入文件怎么写
+```bat
+.venv\Scripts\python.exe runner.py --run_id rpa_20260921_001 --repo_path C:\RPA\Demo --work_dir C:\RPA\Demo\data --input_file C:\RPA\Demo\input_rpa_20260921_001.json
+```
 
-推荐结构：
+## 运行产物
+
+一次正常调用会生成：
+
+- `runner_{run_id}.json`：影刀消费的私有完整结果。
+- `evidence/runs/{run_id}.summary.json`：可提交或上传的脱敏摘要。
+- `logs/run_{run_id}.log`：Python 日志。
+- `crash_snapshots/crash_{run_id}.json`：发生系统异常时的脱敏快照。
+- `data/output/`：业务输出。
+
+影刀先等待 BAT 结束，再读取本次新生成的 runner。BAT 非零退出通常表示虚拟环境、参数、路径或 Python 启动故障；BAT 正常结束后，业务结果以 runner 的 `status` 为准。
+
+## 状态消费
+
+| status | 含义 | 默认动作 |
+| --- | --- | --- |
+| `success` | 全部成功 | 完成 |
+| `warning` | 存在业务跳过，无系统错误 | 记录后完成 |
+| `retryable_error` | 系统错误具有暂时性 | 停止并记录；由 Python 业务设计决定重试范围 |
+| `pending_fix` | 存在不可重试系统问题 | 停止，进入修复闭环 |
+| `locked` | 未取得 Python 执行锁，业务尚未开始 | 等待后重试 |
+| `fatal` | 输入、配置或入口级错误 | 停止并通知维护 |
+
+当前影刀模板的 `RunEvidence` 只记录外部结果，不会自动用 Python 非成功状态改写影刀主流程。需要停止或告警时，应在影刀侧显式分支；影刀不要解析 Python traceback。
+
+## 重试边界
+
+`data.retryable=true` 是错误性质提示，不是整次运行的自动重放指令。
+
+- 只读请求、短暂网络错误、限流和轮询，可由 Python service 做有限重试和退避。
+- 上传、创建、写回等有副作用的操作，必须先具备幂等键、upsert 或完成状态记录。
+- 影刀默认不因 `retryable_error` 重跑整个 BAT。
+- 只有业务契约明确说明整次运行可重复时，影刀才执行 `tasks[]` 级重放。
+- `locked` 表示业务尚未开始，可以由影刀等待后重试。
+
+## 批任务中断策略
+
+默认 `context.fail_fast=true`：`BusinessException` 记录为 warning 后继续，`SystemException` 记录为 error 并中断后续任务。
+
+只有任务彼此独立时，才可以设置：
+
+```json
+{
+  "context": {"fail_fast": false}
+}
+```
+
+也可以对单个独立任务设置 `continue_on_error=true`。存在前后依赖、上传、写回或不可重复副作用时，不要放宽中断策略。
+
+## 可选外部集成
+
+飞书、Linear 和 AI 默认关闭。只有本地 `project.json` 中对应开关为 `true` 时才访问外部服务：
 
 ```json
 {
   "project": "业务项目名",
-  "tasks": [
-    {
-      "id": "task-001",
-      "name": "任务显示名",
-      "type": "your_task_type",
-      "payload": {
-        "input_file": "data/input/source.xlsx",
-        "output_file": "data/output/result.xlsx"
-      }
+  "integrations": {
+    "feishu": {"enabled": false, "webhook": ""},
+    "linear": {"enabled": false, "api_key": "", "team_id": ""},
+    "ai": {
+      "enabled": false,
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "",
+      "model": "",
+      "api_format": "chat_completions",
+      "timeout": 30
     }
-  ],
-  "context": {
-    "operator": "yingdao",
-    "env": "test",
-    "source": "shadowbot",
-    "app_name": "业务项目名"
   }
 }
 ```
 
-关键约定：
+真实密钥只写入被 Git 忽略的本地 `project.json`。`integrations.ai.api_format` 支持 `chat_completions` 和 `responses`；DashScope 示例见 `examples/project.dashscope.example.json`。
 
-- `run_id` 不写入输入文件，由命令行参数传入。
-- 即使输入文件里出现顶层 `run_id`，Python 也会忽略它。
-- `tasks[].type` 是业务路由键，新增业务能力时必须实现对应 handler。
-- `payload` 是业务参数区，handler 只能从这里读取业务输入。
-- 路径字段如果是相对路径，默认以项目根目录为基准。
+## 常见故障
 
-## 与旧约定相比的变化
+- `.venv` 不存在：创建虚拟环境并安装依赖，不能依赖系统 Python 回退。
+- BAT 非零退出且没有新 runner：先检查退出码、参数、`work_dir`、`input_file` 和 `.venv`。
+- runner 为 `fatal`：检查输入文件是否存在、JSON 是否可解析、Schema 版本和任务结构是否合法。
+- runner 为 `pending_fix`：按 `ISSUE_FIX_WORKFLOW.md` 收集 runner、日志、快照和脱敏输入样本。
+- runner 为 `locked`：确认没有另一个 Python 运行仍占用项目后再重试。
+- handler 未找到：实现对应 `tasks[].type`，不要把未实现的 payload 草案当成可运行输入。
+- 输出路径被拒绝：将业务输出放在 `data/output/` 下，不传入越界绝对路径或 `..`。
 
-这次优化后，需要特别注意以下变化：
+## 上线前检查
 
-- 推荐输入文件从固定 `input.json` 改为 `input_{run_id}.json`，避免并发运行时互相覆盖。
-- 固定 `input.json` 仍兼容，但只适合单实例串行运行。
-- `run_id` 只认命令行参数，不再允许输入文件覆盖。
-- 并发锁拿不到时，runner 会先等待 5 秒，再返回 `locked`。
-- Linear 工单是否创建优先看 `context.env`，不是只看 Git 分支。
-- `context.env=prod` 或 `production` 时按生产环境处理。
-- `context.env=test/dev/local/staging` 时不创建生产工单。
-- 系统异常默认仍中断后续任务，但可以通过 `context.fail_fast=false` 支持独立批任务继续执行。
-- 单个任务也可以设置 `continue_on_error=true`，允许该任务失败后继续后续任务。
-- AI 分析默认关闭。启用时必须在本地 `project.json` 配置 `base_url`、`api_key`、`model` 和 `api_format`。
-- `ai.api_format` 支持 `chat_completions` 与 `responses`；`base_url` 只填写 API 根地址，例如 `https://api.openai.com/v1`，不要附加 endpoint。
-
-OpenAI-compatible Chat Completions 代理示例：
-
-```json
-{
-  "ai": {
-    "enabled": true,
-    "base_url": "https://proxy.example.com/v1",
-    "api_key": "local-secret",
-    "model": "model-name",
-    "api_format": "chat_completions",
-    "timeout": 30
-  }
-}
-```
-
-DashScope/Qwen 可参考 `docs/examples/project.dashscope.example.json`。使用时复制到本地 `project.json`，只在本地填入真实 `ai.api_key`、`linear.api_key` 和 `linear.team_id`，不要提交真实密钥。
-
-Responses API 代理只需将格式切换为：
-
-```json
-{
-  "ai": {
-    "api_format": "responses"
-  }
-}
-```
-
-程序会按格式分别请求 `/chat/completions` 或 `/responses`。兼容代理若返回 Chat Completions 的 `choices[].message.content`、Responses 顶层 `output_text`，或 `output[].content[].text`，都会归一化为同一种文本分析结果。
-
-## 状态码与影刀动作
-
-| status | 含义 | 影刀建议动作 |
-| --- | --- | --- |
-| `success` | 全部成功 | 继续后续流程 |
-| `warning` | 有业务跳过，无系统错误 | 记录明细后继续 |
-| `retryable_error` | 全部系统错误都可重试 | 延迟后重试 |
-| `pending_fix` | 存在不可重试系统问题 | 停止，进入修复闭环 |
-| `locked` | 并发锁冲突 | 等待后重试 |
-| `fatal` | 入口、配置或输入级错误 | 停止并通知维护 |
-
-注意：
-
-- 影刀只消费 `runner_{run_id}.json`，不要解析 Python 堆栈。
-- `evidence/runs/{run_id}.summary.json` 只含白名单字段，可用于跨机器复核；详见 `PORTABLE_RUN_EVIDENCE.md`。
-- `retryable_error` 和 `locked` 优先由影刀重试，不应直接让 AI 改代码。
-- `pending_fix` 才是典型的代码修复入口。
-
-## 批任务是否继续执行
-
-默认模式是保守的：
-
-```json
-"context": {
-  "fail_fast": true
-}
-```
-
-默认行为：
-
-- `BusinessException` 记为 warning，继续后续任务。
-- `SystemException` 记为 error，并中断后续任务。
-
-独立批任务可以改成：
-
-```json
-"context": {
-  "fail_fast": false
-}
-```
-
-适用场景：
-
-- 50 个 Excel 文件独立处理。
-- 第 3 个文件坏了，不应该影响第 4 到第 50 个。
-- 最终仍会返回 `pending_fix` 或 `retryable_error`，但结果里会保留更多已执行任务的明细。
-
-谨慎使用场景：
-
-- 后一个任务依赖前一个任务输出。
-- 失败后继续执行可能导致重复上传、重复写入或数据污染。
-- 不确定任务依赖关系时，保持默认 `fail_fast=true`。
-
-## AI 接到业务需求时怎么配合
-
-推荐流程：
-
-1. 用户说明业务目标和影刀已经完成的动作。
-2. AI 先拟定 `input_{run_id}.json` 的 `tasks[].type`、`payload`、输出文件、异常语义和验收标准。
-3. 用户确认输入输出契约。
-4. AI 再实现 handler、补示例输入、补测试、更新文档。
-5. AI 执行测试，说明 `runner_{run_id}.json.status` 的预期结果。
-
-不要跳过第 2 和第 3 步。这个模板的核心是契约优先：先确定影刀给什么、Python 出什么，再写业务代码。
-
-项目同时安装 Trellis 和 Project Gate Controller 时，按事实类型分别保存：
-
-- Project Gate Controller `.project-gates/project.json`：项目唯一 `current_gate`。
-- Project Gate Controller `.project-gates/gate-history.md`：用户已接受的 Gate close 和 revalidation 事件。
-- `.hermes/`：Hermes Agent 的项目插件命名空间，不保存项目 Gate。
-- Trellis Task：PRD、Design、Implement、Task 原生状态、阻塞、下一工程动作和证据引用。
-- Trellis workspace：跨会话工程记录，不复制项目 Gate。
-- Git、PR、runner 和目标系统：代码、评审、运行和业务结果证据。
-
-一个事实只有一个写入方。不得把 `current_gate` 或 Gate 历史复制到 `task.json`、Task notes、`progress.md`、workspace journal、Base 或 `.rpa_ai/handoff`。
-
-每个 Gate 或关键里程碑完成时，AI 应先显式询问：
-
-```text
-当前 Gate 是否验收通过，并记录到 Project Gate Controller？
-```
-
-用户确认后，先调用 Project Gate Controller 关闭当前 Gate，再回读 `.project-gates/project.json` 和 Gate 历史。Trellis 只更新对应工程 Task 的状态、证据、阻塞和下一动作，不写项目 Gate。配置了项目管理 Base 时，可另行生成组合摘要，但 Base 不反写 Project Gate Controller 或 Trellis。
-
-旧项目若存在 `.hermes/project.json`，不得直接 bootstrap 新状态。先使用 `migration-preview` 检查，再经明确确认执行 `migrate-project-gates --confirm-migration`；迁移不得触碰 `.hermes/plugins/` 或其他 Hermes Agent 文件。
-
-没有 Base 的项目仍可完成需求、开发、联调、验收和归档。不要因为代码、测试或 runner 已通过，就跳过本地进度记录；也不要因为缺少 Base 链接而阻塞本地闭环。
-
-Project Gate Controller `current_gate` 表示当前等待关闭的项目 Gate。阻塞是 Trellis Task 的独立属性：保持 Project Gate 不变，在 Task 中记录阻塞原因、责任方和解除条件，不要用一个通用“阻塞 Gate”覆盖真实进度。
-
-## Skill 在哪个环节使用
-
-配套 Skills 维护在独立远程仓库：`https://github.com/redballoom/rpa-dev-template-skills`。
-
-它们不是业务代码，而是帮助 AI 按正确顺序使用模板。初始化 Skill 在项目创建前使用；业务接入、修复和交付收尾 Skill 在项目创建后配合本模板文档使用。
-
-| 阶段 | 使用 Skill | 目标 |
-| --- | --- | --- |
-| 初始化项目 | `rpa-project-bootstrap` | 从远程模板创建干净项目，替换项目身份，清理密钥，执行核心自检 |
-| 新业务接入 | `rpa-contract-business` | 先拟定 `tasks[].type`、`payload`、输出和异常语义，用户确认后再写代码 |
-| 运行失败修复 | `rpa-fix-loop` | 读取 `runner_{run_id}.json`、日志和快照，判断边界后修复并测试 |
-| 证据核对 / Gate关闭 / 交付收尾 | `rpa-delivery-close` | 组合读取 Trellis Task、Project Gate、Git 和 runner；按用户验收只在 Project Gate Controller 推进 Gate，并在配置时生成只读 Base 投影 |
-
-理想配合方式：
-
-- 人负责提供业务目标、确认契约、决定是否上线或合并。
-- Skill 负责约束 AI 的工作顺序。
-- AI 负责实现、测试、解释风险。
-- 模板负责稳定输入输出、异常语义和运行产物。
-
-交付收尾 Skill 可以读取和更新 Trellis Task 证据，并通过 Project Gate Controller 管理项目 Gate；这些工具不是模板运行依赖。`run.bat`、`runner.py` 和业务 handler 不应为了进度记录或交付归档而依赖任何 Agent 状态文件。
-
-## 新会话如何恢复项目
-
-项目使用 Trellis 和 Project Gate Controller 时，AI 按以下顺序恢复：
-
-1. Project Gate Controller `.project-gates/project.json` 和最新 Gate 历史事件。
-2. 当前或用户指定 Trellis Task 的 `task.json` 及原生状态。
-3. Task 的 PRD、Design、Implement、检查清单和证据引用。
-4. Trellis workspace 中最近的工程记录。
-5. 最近 Git/PR、`runner_{run_id}.json` 和业务结果。
-
-恢复后应能分别回答项目当前 Gate，以及工程 Task 的最近完成内容、下一步、责任方、阻塞和证据。飞书 Base 可以组合展示这些摘要，但不是恢复项目的事实源。
-
-## 初始化和升级后的自检
-
-为了让模板满足可复用、可迁移、可升级，项目根目录提供了机器可读的运行契约和自检脚本：
-
-- `VERSION`：模板版本。
-- `schemas/input.schema.json`：影刀输入文件 Schema。
-- `tools/doctor.py`：检查模板底座是否完整。
-
-新项目初始化后、模板升级后、或把项目迁移到另一台电脑后，先运行：
+上线前执行：
 
 ```bat
-python tools\doctor.py
+.venv\Scripts\python.exe -m pytest tests -v
+.venv\Scripts\python.exe tools\doctor.py
 ```
 
-通过后再进入业务契约阶段。若失败，优先修复自检报告中的必需文件、JSON 结构、忽略规则或本机绝对路径问题。
-
-模板不强制安装特定 Agent/Harness。使用 Trellis 和 Project Gate Controller 时遵循以上双事实源边界；使用其他 Harness 时也必须区分项目 Gate 与工程 Task，提供等价的状态、历史和证据引用。这些工具不得成为 `run.bat`、runner 或业务代码的运行依赖。
-
-## 最容易犯的小错误
-
-- 把 `run_id` 写进输入文件，并期望它覆盖命令行参数。
-- 多个影刀流程共用同一个固定 `input.json`。
-- 新增了 `tasks[].type`，但没有实现对应 handler。
-- handler 根据 `task.name` 分支，而不是根据 `task.type` 分支。
-- 把真实密钥、cookie、webhook 写进模板代码或提交到仓库。
-- 把可测试的字段映射、清洗规则、判断逻辑塞回影刀 UI 流程。
-- 生产运行时调用 `git_controller.py` 切分支。
-- `context.env` 漏填，导致工单环境判断只能退回 Git 分支。
-- 使用 `fail_fast=false` 处理有依赖关系的任务。
-- 工作已完成，但没有把项目 Gate 写入 Project Gate Controller，或没有把工程下一步和责任方写入 Trellis Task。
-- 把 Base 当成唯一进度源，导致离线或无权限时无法恢复项目。
-
-## 使用前检查
-
-每次接入新业务前至少确认：
-
-- 输入文件是否使用 `input_{run_id}.json` 或其他本次运行独立路径。
-- 命令行 `run_id` 是否和期望输出 `runner_{run_id}.json` 一致。
-- `context.env` 是否明确填写 `test` 或 `prod`。
-- `tasks[].type` 是否已有 handler。
-- `payload` 的每个字段是否说明了含义、必填性、默认值和路径规则。
-- 业务输出是否写到 `data/output/`。
-- 影刀是否处理 `locked` 和 `retryable_error` 的重试分支。
-- 修改后是否执行 `python -m pytest tests/ -v`。
+再按 `ACCEPTANCE_CHECKLIST.md` 核对输入、输出、状态消费、重试幂等、Evidence 和未验证风险。外部 Agent、Skill 或项目管理工具可以辅助研发，但不是运行依赖，也不得改变 runner 的状态语义。

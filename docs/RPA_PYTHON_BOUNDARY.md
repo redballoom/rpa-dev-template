@@ -12,17 +12,18 @@
 - 登录、验证码、弹窗、人工确认。
 - 准备业务输入文件到 `data/input/`。
 - 写入项目根目录的 `input_{run_id}.json`。固定 `input.json` 仅适合单实例串行运行。
-- 调用 `run.bat` 或 `runner.py`。
-- 读取 `runner_{run_id}.json` 并按 `status` 分支。
+- 生产运行调用 `run.bat`；直接调用 `runner.py` 仅用于本地诊断和测试。
+- 读取 `runner_{run_id}.json` 的稳定字段。当前影刀模板只把结果写入运行证据，不会自动按 `status` 改变主流程状态；需要停止、重试或告警时应增加显式分支。
 
 ## Python 负责
 
-- 可选读取影刀传入的 `input_file`。
+- 必须读取并校验影刀传入的 `input_file`；缺失或契约不合法时返回 `fatal`。
 - 解析 `payload`。
 - 处理 Excel、CSV、JSON、文本、文件汇总、字段映射、规则判断。
 - 把业务结果写入 `data/output/`。
 - 输出 `runner_{run_id}.json`。
 - 写入 `logs/` 和 `crash_snapshots/`。
+- 默认不访问外部通知、工单或 AI 服务；只有本地配置显式启用后才执行，并且集成失败不改变核心状态判定。
 
 ## AI 负责
 
@@ -36,6 +37,7 @@
 - 未经明确要求修改影刀 UI 流程。
 - 在生产运行时切换 Git 分支。
 - 写入真实密钥、生产账号或个人绝对路径。
+- 依赖外部 Agent、Skill、Gate 或任务管理状态来决定运行行为。
 - 跳过验证直接宣称修复完成。
 
 ## 判断规则

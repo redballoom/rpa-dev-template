@@ -6,11 +6,10 @@
 
 - `runner_{run_id}.json.status == "pending_fix"`
 - `runner_{run_id}.json.status == "fatal"`
-- `runner_{run_id}.json.status == "failed"`
 - 同类 `warning` 高频出现并影响业务稳定性
 - 业务输出文件缺失、字段错误、数据不符合预期
 
-`retryable_error` 和 `locked` 优先由影刀重试，不直接进入代码修复，除非重复失败。
+`locked` 可由影刀等待后重试，因为尚未取得 Python 执行锁。`retryable_error` 只说明错误具有暂时性，影刀默认不重放整个 `tasks[]`；应由具体 Python handler/service 按业务契约执行有限重试、断点恢复或转人工处理。重复失败再进入代码或依赖排查。
 
 ## 证据包
 

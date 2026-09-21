@@ -9,10 +9,12 @@ L2: SystemException   -> 创建 Linear 工单 + 收集，汇总通知
   系统分类: UI_CHANGED / DATA_QUALITY / RULE_MISSING / DEPENDENCY_FAILURE / ENVIRONMENT_ISSUE / LOGIC_DEFECT / THIRD_PARTY_LIMIT
 """
 
-import traceback, os, re, json
+import traceback, os, re
 from datetime import datetime
 from typing import Optional, Dict, Any
 from core.notifier import create_linear_issue
+from core.infrastructure.files import atomic_write_json
+from core.infrastructure.redaction import redact_sensitive
 
 
 def _parse_traceback(tb_str: str) -> Dict[str, Any]:
@@ -113,7 +115,7 @@ class SystemException(Exception):
     新增字段:
       code:           异常编码，如 LOGIC_DEFECT
       exc_category:   异常分类，如 UI_CHANGED / DEPENDENCY_FAILURE
-      retryable:      是否可重试（DEPENDENCY_FAILURE → True）
+      retryable:      错误是否具有暂时性；不代表整个 tasks[] 可安全重放
       need_snapshot:  是否需要写 crash snapshot（默认 True）
       need_issue:     是否需要创建 Linear 工单（默认 True）
       run_context:    运行时上下文（operator/env/source/input_file 等）
@@ -213,7 +215,7 @@ class SystemException(Exception):
             "function": self.error_function,
             "line": self.error_line,
             "code_line": self.error_code,
-            "payload": self.payload,
+            "payload": redact_sensitive(self.payload),
             "project": self.project,
             "rule_context": self.rule_context,
             "intent": self.intent,
@@ -224,8 +226,7 @@ class SystemException(Exception):
         snap_dir = os.path.join(repo_path, "crash_snapshots")
         os.makedirs(snap_dir, exist_ok=True)
         path = os.path.join(snap_dir, "crash_%s.json" % run_id)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(snapshot, f, ensure_ascii=False, indent=2)
+        atomic_write_json(path, snapshot)
         print("[exceptions] Snapshot: %s" % path)
         return path
 
@@ -236,6 +237,7 @@ class SystemException(Exception):
         merged = {**self.payload}
         if extra_payload:
             merged.update(extra_payload)
+        external_payload = redact_sensitive(merged)
         run_id = extra_payload.get("run_id", "unknown") if extra_payload else "unknown"
 
         # 1. 写 crash snapshot（可关闭）
@@ -253,7 +255,7 @@ class SystemException(Exception):
                 "traceback": self.traceback_str,
                 "file": self.error_file, "function": self.error_function,
                 "line": self.error_line, "code_line": self.error_code,
-                "payload": merged, "project": self.project,
+                "payload": external_payload, "project": self.project,
                 "rule_context": self.rule_context, "intent": self.intent,
                 "screenshot_path": self.screenshot_path,
                 "last_interacted_selectors": self.last_interacted_selectors,
@@ -282,7 +284,7 @@ class SystemException(Exception):
         if self.need_issue:
             issue_result = create_linear_issue(
                 error_msg=str(self), trace=self.traceback_str,
-                payload_data=merged if merged else {}, project=self.project,
+                payload_data=external_payload if external_payload else {}, project=self.project,
                 repo_path=repo_path,
                 error_type=self.error_type, error_file=self.error_file,
                 error_function=self.error_function, error_line=self.error_line,

@@ -4,17 +4,15 @@
 
 ## 当前契约
 
-影刀可以通过 `run.bat` 或直接调用 `runner.py` 启动本项目。
+影刀生产流程通过 `run.bat` 启动本项目。直接调用 `runner.py` 仅用于本地诊断和测试，并且必须提供与 BAT 相同的 `run_id`、`work_dir` 和 `input_file`。
 
 ```bat
 run.bat {run_id} {work_dir} {input_file}
 ```
 
-`input_file` 可选：
+三个位置参数均为必填。`input_file` 应指向本次运行独立的 `input_{run_id}.json`；缺失、不可读、版本不受支持或任务结构不合法时，runner 返回 `fatal`。固定文件名 `input.json` 只保留为旧单实例流程的兼容命名，最新影刀模板不使用它。
 
-- 推荐传入 `input_{run_id}.json`：`runner.py` 读取 `tasks` 数组，按 `type` 路由到对应 handler
-- 不传 `input_file`：`runner.py` 不读取输入文件，业务代码按默认逻辑执行
-- 固定文件名 `input.json` 仅适合单实例串行运行；并发场景必须使用每次运行独立的输入文件
+生产入口只使用项目 `.venv\Scripts\python.exe`。虚拟环境不存在时 `run.bat` 直接失败，不回退系统 Python。
 
 默认输出：
 
@@ -30,6 +28,7 @@ run.bat {run_id} {work_dir} {input_file}
 
 ```json
 {
+  "schema_version": "1.0",
   "project": "开发模板",
   "tasks": [
     {
@@ -57,8 +56,11 @@ run.bat {run_id} {work_dir} {input_file}
 
 | 文档 | 用途 |
 | --- | --- |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 已按实际 `xbot_robot` 核对的影刀侧流程、开关、证据与已知限制 |
 | [docs/SHADOWBOT_INPUT_CONTRACT.md](docs/SHADOWBOT_INPUT_CONTRACT.md) | 影刀输入文件、`payload`、`data/` 输入输出约定 |
 | [docs/OPERATION_GUIDE.md](docs/OPERATION_GUIDE.md) | 调度工作模式、使用方式和人机配合注意事项 |
+| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | `handlers/services/infrastructure` 分层和安全路径写入规范 |
+| [docs/UPGRADE_GUIDE.md](docs/UPGRADE_GUIDE.md) | 旧项目升级到当前模板时的边界和步骤 |
 | [docs/RPA_PYTHON_BOUNDARY.md](docs/RPA_PYTHON_BOUNDARY.md) | 影刀、Python、AI 的职责边界 |
 | [docs/INTERFACE_EXAMPLES.md](docs/INTERFACE_EXAMPLES.md) | 输入输出协议示例 |
 | [docs/REQUIREMENT_TEMPLATE.md](docs/REQUIREMENT_TEMPLATE.md) | 给 AI 开发业务代码时的需求模板 |
@@ -70,7 +72,6 @@ run.bat {run_id} {work_dir} {input_file}
 | [schemas/output.schema.json](schemas/output.schema.json) | `runner_{run_id}.json` 统一信封的机器可读 Schema |
 | [schemas/evidence-summary.schema.json](schemas/evidence-summary.schema.json) | 可迁移脱敏证据摘要 Schema |
 | [tools/doctor.py](tools/doctor.py) | 跨机器初始化后的模板自检脚本 |
-| [rpa-dev-template-skills](https://github.com/redballoom/rpa-dev-template-skills) | 外部可安装 AI Skills：初始化、业务契约接入、故障修复、本地进度与交付收尾 |
 
 ## 推荐协作方式
 
@@ -79,19 +80,8 @@ run.bat {run_id} {work_dir} {input_file}
 3. Python 读取输入、执行业务、写入业务输出到 `data/output/`。
 4. Python 输出 `runner_{run_id}.json`。
 5. Python 同时输出 `evidence/runs/{run_id}.summary.json`；原始 runner 保持私有，摘要可用于跨机器复核。
-6. 影刀只消费 `runner_{run_id}.json` 的 `status`、`message` 和 `data`，不直接解析 Python 堆栈。
+6. 影刀的 `RunEvidence` 读取并记录 `runner_{run_id}.json` 的状态，不直接解析 Python 堆栈。当前影刀模板不会把 Python 非成功状态自动转成影刀主流程失败；若业务需要停止、重试或告警，必须在影刀侧增加显式状态分支。
 7. AI 后续只在 Code 项目内修改 Python 业务代码、测试和文档，默认不改影刀 UI 流程。
-
-## 配套 Skills
-
-配套 Skills 维护在独立远程仓库，便于在任意电脑、任意项目初始化前安装使用：
-
-- `rpa-project-bootstrap`：从远程模板初始化新项目。
-- `rpa-contract-business`：新业务需求进入时，先做输入输出契约，再实现 handler。
-- `rpa-fix-loop`：运行失败后，基于结果、日志和快照进入修复闭环。
-- `rpa-delivery-close`：组合核对 Trellis 工程 Task 与 Project Gate Controller 项目 Gate，经用户验收后只在 Project Gate Controller 关闭 Gate，并在配置时生成只读 Base 投影。
-
-远程地址：`https://github.com/redballoom/rpa-dev-template-skills`
 
 ## 可迁移与升级底座
 
@@ -111,14 +101,21 @@ python tools\doctor.py
 
 如果 `doctor` 返回 `failed`，先修复底座问题，再进入业务契约和 handler 开发。
 
+外部 Agent、Skill 或项目管理工具可以辅助开发，但不是运行依赖，也不得改变 `run.bat → runner.py → core.entry` 的行为。
+
+## 可选外部集成
+
+飞书通知、Linear 工单和 AI 分析均保留，但默认关闭。只有在本地 `project.json` 中把对应 `integrations.<name>.enabled` 显式设为 `true` 时才会访问外部服务。示例与注意事项见 `docs/OPERATION_GUIDE.md`。
+
 ## 状态码
 
 | status | 含义 | 影刀动作 |
 | --- | --- | --- |
 | `success` | 处理成功 | 继续后续流程 |
 | `warning` | 有业务跳过或非阻断异常 | 记录后继续 |
-| `retryable_error` | 可重试系统异常 | 延迟后重试 |
+| `retryable_error` | 错误具有暂时性，但不代表整个运行可安全重放 | Python 按业务设计处理；影刀默认停止并记录 |
 | `pending_fix` | 需要修复的系统问题 | 停止并进入修复闭环 |
-| `failed` | 不可恢复失败 | 停止并通知人工 |
 | `locked` | 并发锁冲突 | 等待后重试；runner 默认先等待 5 秒 |
 | `fatal` | 入口、配置或输入级错误 | 停止并通知维护 |
+
+`data.retryable=true` 只描述错误性质，不授权影刀自动重放整个 `tasks[]`。除 `locked` 等确认尚未进入业务执行的场景外，是否重试、重试哪一步以及如何保证幂等，由具体 Python handler/service 设计决定。

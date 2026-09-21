@@ -38,7 +38,9 @@ except AttributeError:
     pass
 
 from core.config import (
+    FEISHU_ENABLED,
     FEISHU_WEBHOOK,
+    LINEAR_ENABLED,
     LINEAR_API_KEY,
     LINEAR_TEAM_ID,
     LINEAR_GRAPHQL_URL,
@@ -61,6 +63,9 @@ def send_execution_summary(
     errors: List[Dict[str, Any]],
 ) -> bool:
     """飞书执行汇总通知（一次说完，不再逐个轰炸）"""
+    if not FEISHU_ENABLED:
+        print("[notifier] INFO: Feishu integration disabled")
+        return True
     if not warnings and not errors:
         print("[notifier] 全部成功 (%d/%d)，跳过飞书通知" % (success_count, total))
         return True
@@ -141,6 +146,9 @@ def send_execution_summary(
 
 def _feishu_post(data: dict) -> bool:
     """飞书 Webhook POST 封装"""
+    if not FEISHU_ENABLED:
+        print("[notifier] INFO: Feishu integration disabled")
+        return True
     if not FEISHU_WEBHOOK:
         print("[notifier] INFO: feishu_webhook not configured, skip Feishu notification")
         return True
@@ -313,6 +321,10 @@ def create_linear_issue(
 ) -> Any:
     """创建 Linear 工单，支持 AI 分析增强 + 指派人 + 标签"""
     rc = run_context or {}
+
+    if not LINEAR_ENABLED:
+        print("[notifier] INFO: Linear integration disabled")
+        return {"success": False, "issue_url": ""}
 
     # 测试环境不创建工单。优先使用影刀显式传入的 context.env，Git 分支仅作兜底。
     if repo_path and not _is_production_env(repo_path, rc):

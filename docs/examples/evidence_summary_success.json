@@ -1,12 +1,13 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "run": {
     "run_id": "example-001",
     "status": "success",
     "started_at": "2026-09-05T00:00:00Z",
     "finished_at": "2026-09-05T00:00:01Z",
     "commit": "0000000000000000000000000000000000000000",
-    "working_tree_clean": true
+    "working_tree_clean": true,
+    "delivery_tree_clean": true
   },
   "runtime": {
     "entrypoint": "run.bat",
@@ -41,6 +42,6 @@
   },
   "integrity": {
     "algorithm": "sha256",
-    "sha256": "747919412831f20f07e934d007ca43215c1a445665fef9419cd087c11ac67b8a"
+    "sha256": "a7bf6065a41bfe55e8bb11df9d7967f02ca4dea84b644681a23ecb7957cd1a55"
   }
 }

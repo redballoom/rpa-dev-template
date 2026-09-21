@@ -15,6 +15,7 @@
 
 ```json
 {
+  "schema_version": "1.0",
   "project": "",
   "tasks": [
     {
@@ -52,6 +53,9 @@
 - 何时返回 `success`：
 - 何时返回 `warning`：
 - 何时返回 `retryable_error`：
+- Python 内部重试的最小步骤、最大次数和退避：
+- 操作是否有副作用，如何保证幂等或断点恢复：
+- 是否明确允许影刀重放整个 BAT（默认不允许）：
 - 何时返回 `pending_fix` 或 `fatal`：
 
 ## 验收
